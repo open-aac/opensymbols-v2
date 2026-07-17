@@ -39,7 +39,10 @@ export function createApp(options: AppOptions = {}) {
   app.all('/admin/*', legacyProxy)
   app.all('/stats', legacyProxy)
 
-  app.all('/api/*', (context) => context.json({ error: 'not_found' as const }, 404))
+  app.all('/api/*', (context, next) => {
+    if (context.req.path === '/api') return next()
+    return context.json({ error: 'not_found' as const }, 404)
+  })
 
   if (options.siteRoot && existsSync(options.siteRoot)) {
     const staticFiles = serveStatic({ root: options.siteRoot })

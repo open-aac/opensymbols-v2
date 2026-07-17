@@ -3,6 +3,14 @@ import { setupServer } from 'msw/node'
 import { repository, smallerRepository, symbol } from './fixtures'
 
 export const handlers = [
+  http.post('/api/v2/token', () => HttpResponse.json({
+    access_token: 'token::demo-access-token',
+    expires: '2026-07-18T12:00:00Z',
+  })),
+  http.post('/api/v2/generate_secret', () => HttpResponse.json({
+    shared_secret: 'generated-shared-secret',
+  })),
+  http.get('/api/v2/symbols', () => HttpResponse.json([symbol])),
   http.get('/api/v2/repositories', () =>
     HttpResponse.json({ repositories: [smallerRepository, repository] }),
   ),

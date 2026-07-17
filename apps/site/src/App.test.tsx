@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { App } from './App'
+import { symbol } from './test/fixtures'
 import { server } from './test/server'
 
 function renderApp(path = '/') {
@@ -22,6 +23,108 @@ describe('legacy public discovery parity', () => {
     expect(within(grid!).getAllByRole('link')[0]).toHaveTextContent('Demo Symbols')
     expect(screen.getByRole('heading', { name: 'Examples:' })).toBeInTheDocument()
     expect(await screen.findByRole('link', { name: 'Hello' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'documented Open API' })).toHaveAttribute('href', '/api')
+  })
+
+  it('renders the legacy API reference at its public route', () => {
+    renderApp('/api')
+
+    expect(screen.getByRole('heading', { name: 'OpenSymbols API Documentation' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /POST.*\/api\/v2\/token/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /GET.*\/api\/v2\/symbols/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Request a Shared Secret' })).toBeInTheDocument()
+    expect(screen.getByText(/URLs can be logged/)).toBeInTheDocument()
+    expect(screen.getByText(/hc:1/)).toBeInTheDocument()
+    expect(screen.getAllByText(/object-position/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/token_expired: true/)).toBeInTheDocument()
+    expect(screen.getByText(/HTTP 429/)).toBeInTheDocument()
+  })
+
+  it('submits a shared-secret application without retaining applicant data', async () => {
+    const user = userEvent.setup()
+    let submittedApplication = ''
+    server.use(http.post('/api/v2/generate_secret', async ({ request }) => {
+      submittedApplication = await request.text()
+      return HttpResponse.json({ shared_secret: 'generated-shared-secret' })
+    }))
+    renderApp('/api')
+
+    const applicationForm = screen.getByRole('heading', { name: 'Shared secret application' }).closest('form')
+    expect(applicationForm).not.toBeNull()
+    await user.type(within(applicationForm!).getByLabelText('Organization'), 'AAC Example')
+    await user.type(within(applicationForm!).getByLabelText('Email'), 'hello@example.com')
+    await user.type(within(applicationForm!).getByLabelText('Purpose'), 'Testing symbol search')
+    await user.click(within(applicationForm!).getByRole('button', { name: 'Submit application' }))
+
+    expect(await within(applicationForm!).findByText(/generated-shared-secret/)).toBeInTheDocument()
+    const applicationParameters = new URLSearchParams(submittedApplication)
+    expect(applicationParameters.get('org_name')).toBe('AAC Example')
+    expect(applicationParameters.get('org_email')).toBe('hello@example.com')
+    expect(applicationParameters.get('org_purpose')).toBe('Testing symbol search')
+    expect(within(applicationForm!).getByLabelText('Organization')).toHaveValue('')
+    expect(within(applicationForm!).getByLabelText('Email')).toHaveValue('')
+    expect(within(applicationForm!).getByLabelText('Purpose')).toHaveValue('')
+    expect(window.localStorage).toHaveLength(0)
+    expect(window.sessionStorage).toHaveLength(0)
+  })
+
+  it('exchanges a secret without retaining it and carries the access token into search', async () => {
+    const user = userEvent.setup()
+    let submittedSecret = ''
+    let authorization = ''
+    let searchParameters = ''
+    server.use(
+      http.post('/api/v2/token', async ({ request }) => {
+        submittedSecret = new URLSearchParams(await request.text()).get('secret') || ''
+        return HttpResponse.json({ access_token: 'token::generated', expires: '2026-07-18T12:00:00Z' })
+      }),
+      http.get('/api/v2/symbols', ({ request }) => {
+        authorization = request.headers.get('Authorization') || ''
+        searchParameters = new URL(request.url).searchParams.toString()
+        return HttpResponse.json([symbol])
+      }),
+    )
+    renderApp('/api')
+
+    const tokenForm = screen.getByRole('heading', { name: 'Generate an access token' }).closest('form')
+    expect(tokenForm).not.toBeNull()
+    const secretInput = within(tokenForm!).getByLabelText('Shared secret')
+    await user.type(secretInput, 'local-development-shared-secret')
+    await user.click(within(tokenForm!).getByRole('button', { name: 'Submit' }))
+
+    expect(await within(tokenForm!).findByText(/HTTP 200/)).toBeInTheDocument()
+    expect(submittedSecret).toBe('local-development-shared-secret')
+    expect(secretInput).toHaveValue('')
+    expect(window.localStorage).toHaveLength(0)
+    expect(window.sessionStorage).toHaveLength(0)
+
+    const searchForm = screen.getByRole('heading', { name: 'Try symbol search' }).closest('form')
+    expect(searchForm).not.toBeNull()
+    expect(within(searchForm!).getByLabelText('Access token')).toHaveValue('token::generated')
+    await user.type(within(searchForm!).getByLabelText('Search terms'), 'hello world')
+    await user.clear(within(searchForm!).getByLabelText('Locale'))
+    await user.type(within(searchForm!).getByLabelText('Locale'), 'es')
+    await user.selectOptions(within(searchForm!).getByLabelText('Safe search'), '0')
+    await user.click(within(searchForm!).getByRole('button', { name: 'Submit' }))
+
+    expect(await within(searchForm!).findByText(/HTTP 200/)).toBeInTheDocument()
+    expect(authorization).toBe('token::generated')
+    expect(searchParameters).toBe('q=hello+world&locale=es&safe=0')
+  })
+
+  it('formats and truncates non-JSON API failures without clearing the secret', async () => {
+    const user = userEvent.setup()
+    server.use(http.post('/api/v2/token', () => new HttpResponse('x'.repeat(8_100), { status: 502 })))
+    renderApp('/api')
+
+    const tokenForm = screen.getByRole('heading', { name: 'Generate an access token' }).closest('form')
+    expect(tokenForm).not.toBeNull()
+    const secretInput = within(tokenForm!).getByLabelText('Shared secret')
+    await user.type(secretInput, 'invalid-secret')
+    await user.click(within(tokenForm!).getByRole('button', { name: 'Submit' }))
+
+    expect(await within(tokenForm!).findByText(/HTTP 502/)).toHaveTextContent('[response truncated]')
+    expect(secretInput).toHaveValue('invalid-secret')
   })
 
   it('searches through URL state, clears, and exposes fallback actions', async () => {
