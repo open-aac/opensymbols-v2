@@ -21,11 +21,16 @@ describe('React site delivery', () => {
     const route = await siteApp.request('/repositories/demo', {
       headers: { accept: 'text/html' },
     })
+    const apiDocumentation = await siteApp.request('/api', {
+      headers: { accept: 'text/html' },
+    })
 
     expect(asset.status).toBe(200)
-    await expect(asset.text()).resolves.toBe('static asset\n')
+    await expect(asset.text()).resolves.toMatch(/^static asset\r?\n$/)
     expect(route.status).toBe(200)
     await expect(route.text()).resolves.toContain('Open Symbols test site')
+    expect(apiDocumentation.status).toBe(200)
+    await expect(apiDocumentation.text()).resolves.toContain('Open Symbols test site')
   })
 
   it('does not turn missing assets or API routes into HTML', async () => {

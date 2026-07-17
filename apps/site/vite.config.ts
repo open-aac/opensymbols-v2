@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api': serverTarget,
+      '/api/': serverTarget,
       '/admin': serverTarget,
       '/auth': serverTarget,
       '/login': serverTarget,

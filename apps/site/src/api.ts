@@ -1,5 +1,19 @@
 import type { PaginatedSymbols, Repository, SessionInfo, SymbolResult } from './types'
 
+const MAX_INTERACTIVE_RESPONSE_LENGTH = 8_000
+
+export interface InteractiveApiResult<T = unknown> {
+  status: number
+  ok: boolean
+  output: string
+  data?: T
+}
+
+export interface AccessTokenResponse {
+  access_token: string
+  expires?: string
+}
+
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) {
     super(message)
@@ -26,6 +40,35 @@ async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   }
 
   return response.json() as Promise<T>
+}
+
+async function interactiveRequest<T>(url: string, init: RequestInit = {}): Promise<InteractiveApiResult<T>> {
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      ...init.headers,
+    },
+  })
+  const rawBody = await response.text()
+  let data: T | undefined
+  let formattedBody = rawBody
+
+  try {
+    data = JSON.parse(rawBody) as T
+    formattedBody = JSON.stringify(data, null, 2)
+  } catch {
+    if (formattedBody.length > MAX_INTERACTIVE_RESPONSE_LENGTH) {
+      formattedBody = `${formattedBody.slice(0, MAX_INTERACTIVE_RESPONSE_LENGTH)}\n\n[response truncated]`
+    }
+  }
+
+  return {
+    status: response.status,
+    ok: response.ok,
+    output: `HTTP ${response.status}${formattedBody ? `\n${formattedBody}` : ''}`,
+    data,
+  }
 }
 
 export async function getRepositories() {
@@ -83,5 +126,30 @@ export function submitSymbolRequest(data: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
+  })
+}
+
+export function generateAccessToken(secret: string) {
+  return interactiveRequest<AccessTokenResponse>('/api/v2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ secret }),
+  })
+}
+
+export function searchPublicApi(options: {
+  accessToken: string
+  query: string
+  locale: string
+  safe: boolean
+}) {
+  const params = new URLSearchParams({
+    q: options.query,
+    locale: options.locale,
+    safe: options.safe ? '1' : '0',
+  })
+
+  return interactiveRequest<SymbolResult[]>(`/api/v2/symbols?${params}`, {
+    headers: { Authorization: options.accessToken },
   })
 }
