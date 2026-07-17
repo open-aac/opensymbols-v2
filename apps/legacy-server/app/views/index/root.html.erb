@@ -1,0 +1,217 @@
+<style>
+  .results .result {
+    float: left;
+    width: 200px;
+    height: 220px;
+    margin: 5px;
+    border: 1px solid #aaa;
+    border-radius: 5px;
+    text-align: center;
+  }
+  .results .result .img_holder {
+    display: block;
+    width: 200px;
+    height: 185px;
+    overflow: hidden;
+  }
+  .results .result img {
+    width: 160px;
+    height: 160px;
+    padding: 5px;
+  }
+  .results .result .name {
+    display: block;
+    height: 17px;
+    overflow: hidden;
+  }
+  .results .result .meta {
+    display: block;
+    height: 15px;
+    font-size: 12px;
+    color: #aaa;
+    overflow: hidden;
+  }
+  .results.smaller .result {
+    width: 150px;
+    height: 170px;
+  }
+  .results.smaller .result .img_holder {
+    width: 150px;
+    height: 135px;
+  }
+  .results.smaller .result img {
+    width: 130px;
+    height: 130px;
+  }
+  #request_symbol {
+    margin-top: 50px;
+  }
+  #add_symbol_holder {
+    text-align: center;
+    font-size: 20px;
+    font-weight: bold;
+  }
+  #request_symbol_form {
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  .nav-boxes li {
+    float: left;
+    width: 33%;
+    text-align: center;
+  }
+  .nav-boxes li a {
+    border: 1px solid #aaa;
+    margin: 5px;
+    border-radius: 5px;
+  }
+  .nav-boxes li a img {
+    width: 80%;
+    height: 50px;
+    border: 0;
+    margin: auto;
+    object-fit: contain;
+    objcet-position: center;
+  }
+  .nav-boxes li a .note {
+    font-size: 12px;
+    font-style: italic;
+    color: #888;
+  }
+</style>
+
+<%= render "shared/header" %>
+<div class="row">
+  <div class="span12">
+  </div>
+</div>
+<div class="row">
+  <div class="span6" id="search_holder">
+    <form rel="/api/v1/search" id="search" class='form-inline'>
+      <label>
+      <h3>Search:</h3>
+      <input type="text" name="q" id="query" class="span3"/>
+      </label>
+      <button type="submit" class='btn btn-primary'>Search</button>
+      <button type="button" class="btn" id="clear">Clear</button>
+    </form>
+    <div id="message">
+      <p>
+        OpenSymbols is a collection of <a href="http://creativecommons.org/">open-licensed</a>
+        picture symbols that can be used for augmentative communication.
+        The collection pulls from multiple sources and currently includes
+        access to more than
+        <%= (SymbolRepository.all.map{|r| r.settings['n_symbols'] || 0 }.sum || 0) / 1000 %>,000
+        symbols and icons!
+      </p>
+      <p>
+        Use the search box to search for communication symbols from:
+      </p>
+      <ul class="nav nav-tabs nav-boxes">
+        <% SymbolRepository.all.select{|r| !r.settings['protected'] }.sort_by{|r| r.settings['n_symbols'] }.reverse.each do |repo| %>
+          <li style='float: left; width: 33%;'>
+            <a href="/repositories/<%= repo.repo_key %>">
+              <img id="symbol" src="/repositories/<%= repo.repo_key %>.png"/><br/>
+              <%= repo.settings['name'] %><br/>
+              <span class='note'><%= (repo.settings['default_attribution'] || {})['license'] || 'mixed licenses' %><br/> <%= commas(repo.settings['n_symbols']) %> symbols</span>
+            </a>
+          </li>
+        <% end %>
+        <li><a href="/word_art">
+          <img src="https://d18vdu4p71yql0.cloudfront.net/libraries/noun-project/Speech-Bubble_719_g.svg"/>
+          Make Word Art<br/>&nbsp;<br/>&nbsp;
+        </a></li>
+      </ul>
+      <p>
+      <% @private_repos = SymbolRepository.all.select{|r| r.settings['protected'] }.sort_by{|r| r.settings['name'] } %>
+      <% if @admin && @private_repos.length > 0 %>
+          <p><strong>Private Repositories</strong></p>
+          <ul class="nav nav-tabs nav-stacked" style="width: 300px;">
+          <% @private_repos.each do |repo| %>
+            <li><a href="/repositories/<%= repo.repo_key %>"><%= repo.settings['name'] %></a></li>
+          <% end %>
+        </ul>
+      <% end %>
+      <p>
+        OpenSymbols exists as part of the <a href="https://www.openaac.org" target="_blank">OpenAAC Initiative</a>
+        to lower the barriers for AAC adoption and to make it easier
+        for teams to create AAC resources and activities without
+        needing to pay for proprietary symbol libraries.
+      </p>
+      <p>
+        If you are interested in using OpenSymbols in your
+        project, please reach out to us! We have a
+        <a href="/api">documented Open API</a> you can
+        use to search and embed symbols in your apps
+        or tools.
+      </p>
+    </div>
+    <div id="results" class="results">
+    </div>
+    <div style="clear: both;"></div>
+    <div id="request_symbol" style="display: none;">
+      <div style="text-align: center;" id="add_symbol_holder">
+        Can't find the right symbol?
+        <a href="#" id="add_symbol">Suggest a Symbol</a>
+        or try
+        <a href="#" id="google_image_search" target="_blank">Google</a>
+        or
+        <a href="#" id="flickr_search" target="_blank">Flickr</a>
+      </div>
+      <form id="request_symbol_form" class="form-horizontal" method="POST" action="/api/v1/symbols/requests">
+        <div class="control-group">
+          <h2>Request a Different Symbol</h2>
+          <p>We plan to enable submission of new symbols
+          to the repository. In the mean time you can provide
+          feedback on which symbols you'd like to see by using this
+          form. We'll keep track and it'll help our submitters know
+          the best places to start once the option is available.</p>
+          <p>Interested in being a symbol donor? Contact us!</p>
+        </div>
+        <div class="control-group">
+          <label class="control-label" for="symbol_name">Symbol label:</label>
+          <div class="controls">
+            <input type="text" class="span3" name="name" id="symbol_name"/>
+          </div>
+        </div>
+        <div class="control-group">
+          <label class="control-label" for="sumbol_first_letter">First letter of the symbol label:</label>
+          <div class="controls">
+            <input type="text" class="span1" name="first_letter" id="sumbol_first_letter"/> (i.e. "b" for "bacon". prove your humanity)
+          </div>
+        </div>
+        <div class="control-group">
+          <label class="control-label" for="symbol_comments">Describe the symbol you'd like to see:</label>
+          <div class="controls">
+            <textarea class="span4" name="comments" style="height: 70px;" id="symbol_comments"></textarea>
+          </div>
+        </div>
+        <div class="control-group">
+          <div class="controls">
+            <button type="submit" class='btn btn-primary'>Request Symbol</button>
+            <button type="button" class='btn' id="cancel_symbol_request">Cancel</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="span6" id="examples_holder">
+    <div>
+      <h3 style="display: inline;">Examples:</h3>
+      &nbsp;<a href="#" id="more_examples">see more</a>
+    </div>
+    <div id="examples" class="results smaller"></div>
+  </div>
+</div>
+<a href="https://www.openaac.org" id='openaac_link' style='display: none;'><img src="https://www.openaac.org/openaac.svg" style="position: absolute;bottom: -65px;right: 50px;width: 100px;"></a>
+
+<% add_script "/index.js" %>
+<script>
+var S3Bucket = "<%= ENV['S3_BUCKET'] %>";
+var link = document.getElementById('openaac_link');
+var hero = document.getElementsByClassName('hero-unit')[0];
+if(link && hero) {
+  hero.appendChild(link);
+  link.style.display = 'inline';
+}
+</script>

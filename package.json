@@ -8,11 +8,17 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "dev": "pnpm --parallel --stream --filter @opensymbols/site --filter @opensymbols/server dev",
+    "dev": "pnpm legacy:up && pnpm dev:apps",
+    "dev:apps": "pnpm --parallel --stream --filter @opensymbols/site --filter @opensymbols/server dev",
+    "legacy:up": "docker compose up -d --build --wait postgres legacy-server",
+    "legacy:down": "docker compose down",
+    "legacy:logs": "docker compose logs -f legacy-server",
     "build": "pnpm --filter @opensymbols/site --filter @opensymbols/server build",
     "typecheck": "pnpm --filter @opensymbols/site --filter @opensymbols/server typecheck",
-    "lint": "eslint apps",
-    "test": "pnpm --filter @opensymbols/site --filter @opensymbols/server test"
+    "lint": "eslint apps/site apps/server",
+    "test": "pnpm test:apps && pnpm test:legacy",
+    "test:apps": "pnpm --filter @opensymbols/site --filter @opensymbols/server test",
+    "test:legacy": "docker compose run --rm -e RAILS_ENV=test -e DATABASE_URL=postgresql://opensymbols:opensymbols@postgres:5432/opensymbols_test legacy-server bundle exec rails db:create db:schema:load test"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

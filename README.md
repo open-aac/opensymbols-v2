@@ -6,6 +6,7 @@ OpenSymbols v2 is a pnpm workspace with an independently buildable web applicati
 
 - Node.js 22.12 or newer
 - pnpm 10.30.1
+- Docker Desktop with Docker Compose
 
 ## Install
 
@@ -23,9 +24,22 @@ pnpm dev
 
 - Site: http://localhost:5173
 - Server: http://localhost:3000
+- Legacy Rails server: http://localhost:3001 (loopback only)
 - Health endpoint: http://localhost:3000/api/health
 
-During development, Vite proxies requests under `/api` to the Hono server.
+`pnpm dev` builds and starts the disposable PostgreSQL and legacy Rails services
+before starting the site and Hono watchers. During development, Vite proxies
+requests under `/api` to Hono, and Hono forwards approved unmigrated routes to
+Rails. Stop the containers when they are no longer needed:
+
+```sh
+pnpm legacy:down
+```
+
+Copy `.env.example` to `.env` only when you need to override the local defaults.
+The checked-in values are for local development and must not be used in
+production. Set both `LEGACY_SERVER_PORT` and the matching port in
+`LEGACY_SERVER_URL` when port 3001 is unavailable.
 
 ## Verify
 
@@ -36,9 +50,16 @@ pnpm test
 pnpm build
 ```
 
+`pnpm test` runs both the pnpm workspace tests and the Rails test suite against
+a disposable test database. Useful legacy-service commands are
+`pnpm legacy:up`, `pnpm legacy:logs`, `pnpm test:legacy`, and
+`pnpm legacy:down`.
+
 ## Workspace
 
 - `apps/site` contains the React, Vite, and TypeScript site.
 - `apps/server` contains the Hono, Node.js, and TypeScript API.
+- `apps/legacy-server` contains the isolated Rails backend used for routes that
+  have not yet moved to Hono.
 
 Each application has its own package manifest and production build. The site produces static assets in `apps/site/dist`; the server produces Node.js modules in `apps/server/dist`.
