@@ -64,6 +64,11 @@ from `http://localhost:5173/demo-symbols` by default; override
 source token is `local-development-shared-secret`. These values are for local
 development only, and the seed refuses to run in production.
 
+Development and test searches use the seeded PostgreSQL data when no
+Elasticsearch URL is configured. The fallback preserves the existing symbol
+search response and visibility rules, so the React search page works without
+cloud services. Production continues to require Elasticsearch.
+
 ## Verify
 
 ```sh

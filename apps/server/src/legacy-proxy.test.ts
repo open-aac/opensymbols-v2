@@ -82,6 +82,17 @@ describe('legacy route gateway', () => {
     })
   })
 
+  it('forwards local symbol search parameters through the gateway', async () => {
+    const app = createApp({ legacyServerUrl: upstreamUrl })
+    const response = await app.request('/api/v1/symbols/search?q=hello&locale=es&safe=1')
+
+    expect(response.status).toBe(201)
+    await expect(response.json()).resolves.toMatchObject({
+      method: 'GET',
+      url: '/api/v1/symbols/search?q=hello&locale=es&safe=1',
+    })
+  })
+
   it('returns upstream redirects without following them', async () => {
     const app = createApp({ legacyServerUrl: upstreamUrl })
     const response = await app.request('/api/v2/redirect')

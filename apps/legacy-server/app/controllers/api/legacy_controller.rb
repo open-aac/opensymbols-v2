@@ -50,7 +50,14 @@ class Api::LegacyController < ApplicationController
       allow_protected = true
       protected_repos = @allowed_repos
     end
-    results = PictureSymbol.search(params['q'], params['locale'] || 'en', params['safe'] != '0', allow_protected, protected_repos)
+    results = PictureSymbol.search(
+      params['q'],
+      params['locale'] || 'en',
+      params['safe'] != '0',
+      allow_protected,
+      protected_repos,
+      params['page'].to_i
+    )
     render json: results.to_json
   end
 
