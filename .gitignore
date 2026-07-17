@@ -5,3 +5,7 @@ coverage/
 .env
 .env.*
 !.env.example
+apps/legacy-server/.bundle/
+apps/legacy-server/public/assets/
+apps/legacy-server/tmp/
+apps/legacy-server/vendor/bundle/

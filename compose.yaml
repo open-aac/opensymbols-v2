@@ -1,0 +1,48 @@
+name: opensymbols-v2
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-opensymbols}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-opensymbols}
+      POSTGRES_DB: ${POSTGRES_DB:-opensymbols_development}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}",
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+    volumes:
+      - legacy-postgres-data:/var/lib/postgresql/data
+
+  legacy-server:
+    build:
+      context: ./apps/legacy-server
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-opensymbols}:${POSTGRES_PASSWORD:-opensymbols}@postgres:5432/${POSTGRES_DB:-opensymbols_development}
+      RAILS_ENV: development
+      SECURE_ENCRYPTION_KEY: ${SECURE_ENCRYPTION_KEY:-local-development-secure-encryption-key}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${LEGACY_SERVER_PORT:-3001}:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "ruby",
+          "-rsocket",
+          "-e",
+          "TCPSocket.new('127.0.0.1', 3000).close",
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  legacy-postgres-data:

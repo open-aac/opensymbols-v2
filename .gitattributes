@@ -1,0 +1,2 @@
+apps/legacy-server/bin/* text eol=lf
+apps/legacy-server/docker-entrypoint.sh text eol=lf
