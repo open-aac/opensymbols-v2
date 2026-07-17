@@ -43,8 +43,9 @@ production. Set both `LEGACY_SERVER_PORT` and the matching port in
 
 The React site owns `/`, `/search`, `/api`, `/repositories/:repoKey`, and
 `/symbols/:repoKey/:symbolKey`. The `/api` page documents token generation and
-symbol search with interactive same-origin examples; it never stores submitted
-shared secrets. After `pnpm build`, the Hono production server
+symbol search and shared-secret applications with interactive same-origin
+examples; it never stores submitted secrets or application details. After
+`pnpm build`, the Hono production server
 serves the Vite output and supports direct navigation to those client routes.
 Set `SITE_DIST_PATH` only when the site build is stored somewhere other than
 `apps/site/dist`.

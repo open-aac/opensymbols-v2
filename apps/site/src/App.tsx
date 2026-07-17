@@ -8,6 +8,7 @@ import {
   getRepositorySymbols,
   getSymbol,
   randomSymbols,
+  requestSharedSecret,
   searchPublicApi,
   searchSymbols,
   submitSymbolRequest,
@@ -432,10 +433,15 @@ function ApiDocumentationPage() {
   const [query, setQuery] = useState('')
   const [locale, setLocale] = useState('en')
   const [safe, setSafe] = useState(true)
+  const [organization, setOrganization] = useState('')
+  const [email, setEmail] = useState('')
+  const [purpose, setPurpose] = useState('')
   const [tokenResult, setTokenResult] = useState<InteractiveApiResult>()
   const [searchResult, setSearchResult] = useState<InteractiveApiResult>()
+  const [sharedSecretResult, setSharedSecretResult] = useState<InteractiveApiResult>()
   const [tokenLoading, setTokenLoading] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
+  const [sharedSecretLoading, setSharedSecretLoading] = useState(false)
 
   async function requestToken(event: FormEvent) {
     event.preventDefault()
@@ -468,6 +474,25 @@ function ApiDocumentationPage() {
     }
   }
 
+  async function applyForSharedSecret(event: FormEvent) {
+    event.preventDefault()
+    setSharedSecretLoading(true)
+
+    try {
+      const result = await requestSharedSecret({ organization, email, purpose })
+      setSharedSecretResult(result)
+      if (result.ok && result.data?.shared_secret) {
+        setOrganization('')
+        setEmail('')
+        setPurpose('')
+      }
+    } catch {
+      setSharedSecretResult({ status: 0, ok: false, output: 'Request failed before the server responded.' })
+    } finally {
+      setSharedSecretLoading(false)
+    }
+  }
+
   return (
     <article className="content-page api-documentation">
       <header className="api-introduction">
@@ -478,9 +503,11 @@ function ApiDocumentationPage() {
           across participating symbol libraries and add picture search to their own tools.
         </p>
         <p>
-          Public API access requires a shared secret. Exchange that secret for a short-lived access token, then send
-          the token in the <code>Authorization</code> header on later requests. Keep shared secrets on a trusted server;
-          do not expose them in browser JavaScript or compiled application code.
+          Public API access requires a shared secret. <a href="#shared-secret">Apply below</a> if you need one.
+          Exchange that secret for a short-lived access token, then send the token in the <code>Authorization</code>
+          header or as the <code>access_token</code> query parameter on later requests. The header is preferred because
+          URLs can be logged. Keep shared secrets on a trusted server; do not expose them in browser JavaScript or
+          compiled application code.
         </p>
       </header>
 
@@ -527,7 +554,10 @@ function ApiDocumentationPage() {
           <h3>Query parameters</h3>
           <dl>
             <dt><code>q</code></dt>
-            <dd>Required search terms. Add <code>repo:repo-key</code> to limit results or <code>favor:repo-key</code> to favour a library.</dd>
+            <dd>
+              Required search terms. Add <code>repo:repo-key</code> to limit results, <code>favor:repo-key</code> to
+              favour a library, or <code>hc:1</code> to favour high-contrast results.
+            </dd>
             <dt><code>locale</code></dt>
             <dd>Two-letter lowercase locale such as <code>en</code> or <code>es</code>. Defaults to <code>en</code>.</dd>
             <dt><code>safe</code></dt>
@@ -537,12 +567,29 @@ function ApiDocumentationPage() {
           <pre>{`HTTP 200
 [
   {
-    "name": "hello",
-    "repo_key": "demo",
-    "license": "CC0 1.0",
-    "image_url": "https://…"
+    "id": 2211,
+    "symbol_key": "castle-1-2fcbe1a4",
+    "name": "gato",
+    "locale": "es",
+    "license": "CC BY-NC-SA",
+    "license_url": "http://creativecommons.org/licenses/by-nc-sa/3.0/",
+    "author": "Sergio Palao",
+    "author_url": "http://www.catedu.es/arasaac/condiciones_uso.php",
+    "source_url": null,
+    "repo_key": "arasaac",
+    "hc": false,
+    "extension": "png",
+    "image_url": "https://…",
+    "search_string": null,
+    "unsafe_result": false,
+    "_href": "/api/v1/symbols/arasaac/castle-1-2fcbe1a4?id=2211",
+    "details_url": "/symbols/arasaac/castle-1-2fcbe1a4?id=2211"
   }
 ]`}</pre>
+          <p>
+            Other attributes may appear but should not be treated as stable. Image dimensions and file size are not
+            returned, so HTML clients should use <code>object-fit</code> and <code>object-position</code> to centre images.
+          </p>
         </div>
         <form className="api-runner" onSubmit={runSearch}>
           <h2>Try symbol search</h2>
@@ -572,6 +619,45 @@ function ApiDocumentationPage() {
         </form>
       </section>
 
+      <section className="api-secret-request" id="shared-secret">
+        <div>
+          <h2>Request a Shared Secret</h2>
+          <p><code>POST /api/v2/generate_secret</code></p>
+          <p>
+            Submit one application for each app or distinct purpose. Shared secrets may be disabled if their usage
+            affects other OpenSymbols users, so identify a monitored email address and describe the intended use.
+          </p>
+          <p>
+            By applying, you agree to use the service responsibly and avoid unnecessary repeated image requests.
+          </p>
+        </div>
+        <form className="api-runner" onSubmit={applyForSharedSecret}>
+          <h2>Shared secret application</h2>
+          <label>
+            Organization
+            <input required value={organization} onChange={(event) => setOrganization(event.target.value)} />
+          </label>
+          <label>
+            Email
+            <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+          </label>
+          <label>
+            Purpose
+            <textarea
+              required
+              rows={4}
+              placeholder="Description of your intended use"
+              value={purpose}
+              onChange={(event) => setPurpose(event.target.value)}
+            />
+          </label>
+          <button className="button button--primary" disabled={sharedSecretLoading}>
+            {sharedSecretLoading ? 'Sending…' : 'Submit application'}
+          </button>
+          <ApiResult result={sharedSecretResult} />
+        </form>
+      </section>
+
       <section className="api-notes">
         <h2>Handling errors and image URLs</h2>
         <p>
@@ -580,7 +666,8 @@ function ApiDocumentationPage() {
         </p>
         <p>
           OpenSymbols currently returns long-lived image URLs. Download images you need to retain rather than creating
-          unnecessary repeated traffic, and use <code>object-fit</code> when displaying images with unknown dimensions.
+          unnecessary repeated traffic, and use <code>object-fit</code> and <code>object-position</code> when displaying
+          images with unknown dimensions.
         </p>
       </section>
     </article>

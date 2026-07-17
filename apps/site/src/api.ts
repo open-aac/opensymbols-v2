@@ -14,6 +14,10 @@ export interface AccessTokenResponse {
   expires?: string
 }
 
+export interface SharedSecretResponse {
+  shared_secret: string
+}
+
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) {
     super(message)
@@ -134,6 +138,22 @@ export function generateAccessToken(secret: string) {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ secret }),
+  })
+}
+
+export function requestSharedSecret(application: {
+  organization: string
+  email: string
+  purpose: string
+}) {
+  return interactiveRequest<SharedSecretResponse>('/api/v2/generate_secret', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      org_name: application.organization,
+      org_email: application.email,
+      org_purpose: application.purpose,
+    }),
   })
 }
 
