@@ -41,6 +41,20 @@ The checked-in values are for local development and must not be used in
 production. Set both `LEGACY_SERVER_PORT` and the matching port in
 `LEGACY_SERVER_URL` when port 3001 is unavailable.
 
+Seed the local database with repeatable demo repositories, symbols, defaults,
+requests, and an approved development API source:
+
+```sh
+pnpm legacy:seed
+```
+
+The seed is explicit and safe to rerun. It updates only records owned by the
+demo seed and preserves other local data. Demo images are served by the site
+from `http://localhost:5173/demo-symbols` by default; override
+`DEMO_ASSET_BASE_URL` when the site uses another origin. The local external
+source token is `local-development-shared-secret`. These values are for local
+development only, and the seed refuses to run in production.
+
 ## Verify
 
 ```sh
@@ -52,7 +66,7 @@ pnpm build
 
 `pnpm test` runs both the pnpm workspace tests and the Rails test suite against
 a disposable test database. Useful legacy-service commands are
-`pnpm legacy:up`, `pnpm legacy:logs`, `pnpm test:legacy`, and
+`pnpm legacy:up`, `pnpm legacy:seed`, `pnpm legacy:logs`, `pnpm test:legacy`, and
 `pnpm legacy:down`.
 
 ## Workspace
