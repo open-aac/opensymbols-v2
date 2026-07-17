@@ -56,6 +56,15 @@ class PublicApiControllerTest < ActionDispatch::IntegrationTest
     assert_equal 'Example Designer', body['symbol']['author']
   end
 
+  test 'searches public symbols without Elasticsearch' do
+    get '/api/v1/symbols/search', params: {q: 'hello', locale: 'en', safe: '1'}
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal ['hello-a1'], body.map { |symbol| symbol['symbol_key'] }
+    assert_equal 'Hello', body.first['name']
+  end
+
   test 'hides protected repositories and symbols' do
     @repo.settings['protected'] = true
     @repo.save!

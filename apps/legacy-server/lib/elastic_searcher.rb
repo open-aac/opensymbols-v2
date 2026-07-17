@@ -1,6 +1,10 @@
 require 'elasticsearch'
 
 module ElasticSearcher
+  def self.configured?
+    !!(ENV['ELASTIC_SEARCH_URL'] || ENV['BONSAI_URL'] || ENV['FOUNDELASTICSEARCH_URL'])
+  end
+
   def self.searcher
     opts = {host: (ENV['ELASTIC_SEARCH_URL'] || ENV['BONSAI_URL'] || ENV['FOUNDELASTICSEARCH_URL']), log: (ENV['RAILS_ENV'] == 'development')}
     if ENV['ELASTIC_USER'] && ENV['ELASTIC_TOKEN']
@@ -14,7 +18,9 @@ module ElasticSearcher
   end
 
   def self.enabled?
-    ENV['RAILS_ENV'] != 'test' && !!self.searcher
+    return false if ENV['RAILS_ENV'] == 'test'
+    return false if ENV['RAILS_ENV'] == 'development' && !configured?
+    !!self.searcher
   end
 
   def self.index_symbol(symbol, locale='en')

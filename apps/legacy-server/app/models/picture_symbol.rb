@@ -230,7 +230,7 @@ class PictureSymbol < ApplicationRecord
     self.save
   end
 
-  def self.search(q, locale='en', safe_search=true, allow_protected=false, protected_repos=nil)
+  def self.search(q, locale='en', safe_search=true, allow_protected=false, protected_repos=nil, page=0, per_page=50)
     q = q.to_s.downcase
     repo_filter = nil
     favored_repo_filter = nil
@@ -274,6 +274,18 @@ class PictureSymbol < ApplicationRecord
           sym
         end
       end
+    elsif LocalSymbolSearcher.enabled?
+      res = LocalSymbolSearcher.search(
+        q,
+        locale: locale,
+        repo_filter: repo_filter,
+        favored_repo_filter: favored_repo_filter,
+        safe_search: safe_search,
+        allow_protected: allow_protected,
+        protected_repos: protected_repos || [],
+        page: page,
+        per_page: per_page
+      )
     else
       raise "elastic search required"
       # results = PictureSymbol.where(:search_string.like => "%#{q.to_s}%", :enabled => true, :limit => 250, :order => random)
