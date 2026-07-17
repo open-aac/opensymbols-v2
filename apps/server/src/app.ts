@@ -1,9 +1,12 @@
+import { existsSync } from 'node:fs'
 import { Hono } from 'hono'
+import { serveStatic } from '@hono/node-server/serve-static'
 import { createLegacyProxy } from './legacy-proxy.js'
 
 export interface AppOptions {
   legacyServerUrl?: string
   legacyServerTimeoutMs?: number
+  siteRoot?: string
 }
 
 function legacyTimeoutFromEnvironment() {
@@ -35,6 +38,22 @@ export function createApp(options: AppOptions = {}) {
   app.all('/admin', legacyProxy)
   app.all('/admin/*', legacyProxy)
   app.all('/stats', legacyProxy)
+
+  app.all('/api/*', (context) => context.json({ error: 'not_found' as const }, 404))
+
+  if (options.siteRoot && existsSync(options.siteRoot)) {
+    const staticFiles = serveStatic({ root: options.siteRoot })
+    const siteIndex = serveStatic({ root: options.siteRoot, path: 'index.html' })
+
+    app.use('*', staticFiles)
+    app.get('*', async (context, next) => {
+      const acceptsHtml = context.req.header('accept')?.includes('text/html') ?? false
+      const hasFileExtension = /\/[^/]+\.[^/]+$/.test(context.req.path)
+
+      if (!acceptsHtml || hasFileExtension) return next()
+      return siteIndex(context, next)
+    })
+  }
 
   return app
 }

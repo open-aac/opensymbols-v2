@@ -41,6 +41,12 @@ The checked-in values are for local development and must not be used in
 production. Set both `LEGACY_SERVER_PORT` and the matching port in
 `LEGACY_SERVER_URL` when port 3001 is unavailable.
 
+The React site owns `/`, `/search`, `/repositories/:repoKey`, and
+`/symbols/:repoKey/:symbolKey`. After `pnpm build`, the Hono production server
+serves the Vite output and supports direct navigation to those client routes.
+Set `SITE_DIST_PATH` only when the site build is stored somewhere other than
+`apps/site/dist`.
+
 Seed the local database with repeatable demo repositories, symbols, defaults,
 requests, and an approved development API source:
 
