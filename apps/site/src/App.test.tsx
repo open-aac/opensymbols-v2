@@ -6,24 +6,32 @@ import { describe, expect, it } from 'vitest'
 import { App } from './App'
 import { symbol } from './test/fixtures'
 import { server } from './test/server'
+import { expectNoAccessibilityViolations } from './test/axe'
 
 function renderApp(path = '/') {
   return render(<MemoryRouter initialEntries={[path]}><App /></MemoryRouter>)
 }
 
-describe('legacy public discovery parity', () => {
-  it('presents repositories by size, examples, and the legacy identity', async () => {
-    renderApp()
+describe('public discovery', () => {
+  it('presents the search-first hierarchy, repositories, examples, and primary navigation', async () => {
+    const view = renderApp()
 
-    expect(screen.getByText('open-licensed communication symbols for everyone')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Find open communication symbols' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Search symbols' })).toHaveAttribute('href', '/search')
     const repositoryLink = await screen.findByRole('link', { name: /demo symbols/i })
     expect(repositoryLink).toHaveTextContent('CC BY 4.0')
     const grid = document.querySelector<HTMLElement>('.repository-grid')
     expect(grid).not.toBeNull()
     expect(within(grid!).getAllByRole('link')[0]).toHaveTextContent('Demo Symbols')
-    expect(screen.getByRole('heading', { name: 'Examples:' })).toBeInTheDocument()
-    expect(await screen.findByRole('link', { name: 'Hello' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'documented Open API' })).toHaveAttribute('href', '/api')
+    expect(screen.getByRole('heading', { name: 'Symbol examples' })).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: /Hello/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Read the API documentation' })).toHaveAttribute('href', '/api')
+    expect(
+      screen.getByRole('search').compareDocumentPosition(screen.getByRole('heading', { name: 'Symbol examples' }))
+      & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    await expectNoAccessibilityViolations(view.container)
   })
 
   it('renders the legacy API reference at its public route', () => {
@@ -129,40 +137,44 @@ describe('legacy public discovery parity', () => {
 
   it('searches through URL state, clears, and exposes fallback actions', async () => {
     const user = userEvent.setup()
-    renderApp()
+    const view = renderApp()
 
-    await user.type(screen.getByLabelText('Search:'), 'hello')
+    await user.type(screen.getByLabelText('Search symbols'), 'hello')
     await user.click(screen.getByRole('button', { name: 'Search' }))
 
-    expect(await screen.findByRole('link', { name: 'Hello' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Suggest a Symbol' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Google' })).toHaveAttribute('href', expect.stringContaining('hello'))
-    expect(screen.queryByRole('heading', { name: 'Examples:' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: /Hello/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Results for “hello”' })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('1 symbol found')
+    expect(screen.getByRole('button', { name: 'Suggest a symbol' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Search Google Images' })).toHaveAttribute('href', expect.stringContaining('hello'))
+    expect(screen.queryByRole('heading', { name: 'Symbol examples' })).not.toBeInTheDocument()
+    await expectNoAccessibilityViolations(view.container)
 
-    await user.click(screen.getByRole('button', { name: 'Clear' }))
-    expect(await screen.findByRole('heading', { name: 'Examples:' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Clear search' }))
+    expect(await screen.findByRole('heading', { name: 'Symbol examples' })).toBeInTheDocument()
   })
 
   it('submits the legacy honeypot symbol-request form', async () => {
     const user = userEvent.setup()
     renderApp('/search?q=bacon')
 
-    await user.click(await screen.findByRole('button', { name: 'Suggest a Symbol' }))
-    const form = screen.getByRole('heading', { name: 'Request a Different Symbol' }).closest('form')
+    await user.click(await screen.findByRole('button', { name: 'Suggest a symbol' }))
+    const form = screen.getByRole('heading', { name: 'Request a different symbol' }).closest('form')
     expect(form).not.toBeNull()
     await user.type(within(form!).getByLabelText(/first letter/i), 'b')
     await user.type(within(form!).getByLabelText('Description'), 'A clear picture of bacon')
-    await user.click(within(form!).getByRole('button', { name: 'Request Symbol' }))
+    await user.click(within(form!).getByRole('button', { name: 'Request symbol' }))
 
     expect(await screen.findByText(/submitted.*thank you/i)).toBeInTheDocument()
   })
 
   it('shows setup guidance for an empty database', async () => {
     server.use(http.get('/api/v2/repositories', () => HttpResponse.json({ repositories: [] })))
-    renderApp()
+    const view = renderApp()
 
     expect(await screen.findByText(/no symbol repositories are configured/i)).toBeInTheDocument()
     expect(screen.getByText('pnpm legacy:seed')).toBeInTheDocument()
+    await expectNoAccessibilityViolations(view.container)
   })
 
   it('renders repository metadata, filters, and pagination', async () => {
@@ -199,6 +211,7 @@ describe('legacy public discovery parity', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Loading failed')
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    await expectNoAccessibilityViolations(view.container)
 
     view.unmount()
     renderApp('/not-rebuilt')

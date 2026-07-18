@@ -1,251 +1,20 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { type FormEvent, useCallback, useEffect, useState } from 'react'
+import { Link, Route, Routes, useParams } from 'react-router-dom'
 import {
-  checkSession,
   generateAccessToken,
-  getRepositories,
   getRepository,
   getRepositorySymbols,
   getSymbol,
-  randomSymbols,
   requestSharedSecret,
   searchPublicApi,
   searchSymbols,
-  submitSymbolRequest,
 } from './api'
 import type { InteractiveApiResult } from './api'
-import { PageState, RepositoryCard, SymbolCard } from './components'
+import { PageState, SymbolCard } from './components'
+import { SiteLayout } from './components/layout'
+import { DiscoveryPage } from './features/discovery'
 import { useAsync } from './hooks'
 import type { SymbolResult } from './types'
-
-function useSession() {
-  const [userName, setUserName] = useState<string>()
-
-  useEffect(() => {
-    const token = localStorage.getItem('auth_token')
-    if (!token) return
-
-    checkSession(token)
-      .then((session) => {
-        if (!session.valid) throw new Error('Invalid session')
-        const refreshedToken = session.refresh_token || token
-        setUserName(session.user_name || 'User')
-        localStorage.setItem('auth_token', refreshedToken)
-        document.cookie = `auth=${refreshedToken};path=/;SameSite=Lax`
-      })
-      .catch(() => {
-        localStorage.removeItem('auth_token')
-        document.cookie = 'auth=;path=/;max-age=0;SameSite=Lax'
-      })
-  }, [])
-
-  return {
-    userName,
-    logout() {
-      localStorage.removeItem('auth_token')
-      document.cookie = 'auth=;path=/;max-age=0;SameSite=Lax'
-      window.location.assign('/')
-    },
-  }
-}
-
-function Layout() {
-  const session = useSession()
-
-  return (
-    <div className="page-shell">
-      <a className="skip-link" href="#main">Skip to content</a>
-      <header className="site-header">
-        <Link className="identity" to="/">
-          <img src="/open-symbols-mark.svg" alt="" />
-          <strong>Open Symbols</strong>
-        </Link>
-        <span className="tagline">open-licensed communication symbols for everyone</span>
-        {session.userName && (
-          <div className="session-links">
-            <a href="/admin">{session.userName}</a>
-            <span aria-hidden="true"> | </span>
-            <button onClick={session.logout}>Logout</button>
-          </div>
-        )}
-        <a className="openaac-badge" href="https://www.openaac.org" aria-label="OpenAAC">
-          <span>OpenAAC</span>
-        </a>
-      </header>
-      <main id="main" tabIndex={-1}>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/search" element={<HomePage />} />
-          <Route path="/api" element={<ApiDocumentationPage />} />
-          <Route path="/repositories/:repoKey" element={<RepositoryPage />} />
-          <Route path="/symbols/:repoKey/:symbolKey" element={<SymbolPage />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-      </main>
-      <footer>
-        OpenSymbols is <a href="https://github.com/open-aac/opensymbols">open source</a>, powered by{' '}
-        <a href="https://www.openaac.org">OpenAAC</a> | <a href="/login">Admin</a>
-      </footer>
-    </div>
-  )
-}
-
-function SearchBox({ query }: { query: string }) {
-  const navigate = useNavigate()
-  const [value, setValue] = useState(query)
-
-  return (
-    <form
-      className="search-box"
-      role="search"
-      onSubmit={(event) => {
-        event.preventDefault()
-        const nextQuery = value.trim()
-        if (nextQuery) navigate(`/search?q=${encodeURIComponent(nextQuery)}`)
-      }}
-    >
-      <label htmlFor="query"><strong>Search:</strong></label>
-      <div>
-        <input id="query" value={value} onChange={(event) => setValue(event.target.value)} />
-        <button className="button button--primary" type="submit">Search</button>
-        <button className="button" type="button" onClick={() => { setValue(''); navigate('/') }}>Clear</button>
-      </div>
-    </form>
-  )
-}
-
-function SymbolRequest({ query }: { query: string }) {
-  const [open, setOpen] = useState(false)
-  const [name, setName] = useState(query)
-  const [firstLetter, setFirstLetter] = useState('')
-  const [comments, setComments] = useState('')
-  const [status, setStatus] = useState<string>()
-
-  async function submit(event: FormEvent) {
-    event.preventDefault()
-    setStatus('Requesting symbol…')
-
-    try {
-      await submitSymbolRequest({ name, first_letter: firstLetter, comments })
-      setStatus('Symbol request submitted. Thank you!')
-      setOpen(false)
-    } catch {
-      setStatus('Request failed. Check the fields and try again.')
-    }
-  }
-
-  return (
-    <section className="request-symbol">
-      <p className="request-actions">
-        Can’t find the right symbol?{' '}
-        <button className="link-button" onClick={() => setOpen(true)}>Suggest a Symbol</button>
-        {' '}or try{' '}
-        <a target="_blank" rel="noreferrer" href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(query)}&tbs=sur:fc`}>Google</a>
-        {' '}or{' '}
-        <a target="_blank" rel="noreferrer" href={`https://www.flickr.com/search/?l=cc&ct=0&mt=all&adv=1&q=${encodeURIComponent(query)}`}>Flickr</a>
-      </p>
-      {status && <p role="status">{status}</p>}
-      {open && (
-        <form className="stacked-form" onSubmit={submit}>
-          <h2>Request a Different Symbol</h2>
-          <p>Tell us which symbol you would like to see. Requests help symbol donors know where to start.</p>
-          <label>
-            Symbol label
-            <input required value={name} onChange={(event) => setName(event.target.value)} />
-          </label>
-          <label>
-            First letter of the symbol label
-            <input required maxLength={1} value={firstLetter} onChange={(event) => setFirstLetter(event.target.value)} />
-            <small>For example, “b” for “bacon”. This helps prevent automated requests.</small>
-          </label>
-          <label>
-            Description
-            <textarea required rows={4} value={comments} onChange={(event) => setComments(event.target.value)} />
-          </label>
-          <div>
-            <button className="button button--primary">Request Symbol</button>
-            <button className="button" type="button" onClick={() => setOpen(false)}>Cancel</button>
-          </div>
-        </form>
-      )}
-    </section>
-  )
-}
-
-function HomePage() {
-  const [params] = useSearchParams()
-  const query = params.get('q') || ''
-  const repositories = useAsync(getRepositories, [])
-  const examples = useAsync(randomSymbols, [])
-  const results = useAsync(() => (query ? searchSymbols(query) : Promise.resolve([])), [query])
-  const sortedRepositories = useMemo(
-    () => [...(repositories.data || [])].sort((a, b) => b.symbol_count - a.symbol_count),
-    [repositories.data],
-  )
-  const total = sortedRepositories.reduce((sum, repository) => sum + repository.symbol_count, 0)
-
-  return (
-    <div className={query ? 'home home--searching' : 'home'}>
-      <section className="home-primary">
-        <SearchBox key={query} query={query} />
-        {query ? (
-          <>
-            <PageState loading={results.loading} error={results.error} onRetry={results.retry}>
-              <div className="symbol-grid">
-                {results.data?.map((symbol) => <SymbolCard key={symbol.id} symbol={symbol} />)}
-              </div>
-              {!results.loading && results.data?.length === 0 && <p className="state-message">No results found.</p>}
-            </PageState>
-            <SymbolRequest key={query} query={query} />
-          </>
-        ) : (
-          <PageState loading={repositories.loading} error={repositories.error} onRetry={repositories.retry}>
-            <div className="intro-copy">
-              <p>
-                OpenSymbols is a collection of <a href="https://creativecommons.org/">open-licensed</a> picture
-                symbols that can be used for augmentative communication. The collection pulls from multiple sources
-                and currently includes access to more than {total.toLocaleString()} symbols and icons!
-              </p>
-              <p>Use the search box to search for communication symbols from:</p>
-            </div>
-            {sortedRepositories.length ? (
-              <div className="repository-grid">
-                {sortedRepositories.map((repository) => (
-                  <RepositoryCard key={repository.repo_key} repository={repository} />
-                ))}
-              </div>
-            ) : (
-              <div className="empty-setup">
-                <strong>No symbol repositories are configured in this local database.</strong>
-                <p>Run <code>pnpm legacy:seed</code> to add local demonstration symbols.</p>
-              </div>
-            )}
-            <div className="about-copy">
-              <p>
-                OpenSymbols exists as part of the <a href="https://www.openaac.org">OpenAAC Initiative</a> to lower
-                the barriers for AAC adoption and make it easier to create AAC resources without proprietary libraries.
-              </p>
-              <p>Interested in using OpenSymbols in your project? See the <Link to="/api">documented Open API</Link>.</p>
-            </div>
-          </PageState>
-        )}
-      </section>
-      {!query && (
-        <aside className="examples">
-          <div className="section-title">
-            <h2>Examples:</h2>
-            <button className="link-button" onClick={examples.retry}>see more</button>
-          </div>
-          <PageState loading={examples.loading} error={examples.error} onRetry={examples.retry}>
-            <div className="example-grid">
-              {examples.data?.map((symbol) => <SymbolCard key={symbol.id} symbol={symbol} compact />)}
-            </div>
-          </PageState>
-        </aside>
-      )}
-    </div>
-  )
-}
 
 type RepositoryFilter = 'none' | 'unsafe' | 'skins'
 
@@ -686,5 +455,16 @@ function NotFoundPage() {
 }
 
 export function App() {
-  return <Layout />
+  return (
+    <SiteLayout>
+      <Routes>
+        <Route path="/" element={<DiscoveryPage />} />
+        <Route path="/search" element={<DiscoveryPage />} />
+        <Route path="/api" element={<ApiDocumentationPage />} />
+        <Route path="/repositories/:repoKey" element={<RepositoryPage />} />
+        <Route path="/symbols/:repoKey/:symbolKey" element={<SymbolPage />} />
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </SiteLayout>
+  )
 }
