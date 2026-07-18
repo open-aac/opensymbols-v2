@@ -1,25 +1,28 @@
 import type { ReactNode } from 'react'
-import { Link } from 'react-router-dom'
 import type { Repository, SymbolResult } from './types'
+import { Button, CardLink } from './components/ui'
 
 export function PageState({
   loading,
   error,
   onRetry,
+  loadingLabel = 'Loading…',
   children,
 }: {
   loading: boolean
   error?: Error
   onRetry: () => void
+  loadingLabel?: string
   children: ReactNode
 }) {
-  if (loading) return <p className="state-message" role="status">Loading…</p>
+  if (loading) return <p className="state-message" role="status">{loadingLabel}</p>
 
   if (error) {
     return (
       <div className="state-message state-message--error" role="alert">
-        <p>Loading failed. The OpenSymbols service may be unavailable.</p>
-        <button className="button" onClick={onRetry}>Try again</button>
+        <h2>Loading failed</h2>
+        <p>The OpenSymbols service may be unavailable.</p>
+        <Button onClick={onRetry}>Try again</Button>
       </div>
     )
   }
@@ -30,20 +33,18 @@ export function PageState({
 export function SymbolCard({ symbol, compact = false }: { symbol: SymbolResult; compact?: boolean }) {
   return (
     <article className={`symbol-card${compact ? ' symbol-card--compact' : ''}`}>
-      <Link className="symbol-card__image" to={`/symbols/${symbol.repo_key}/${symbol.symbol_key}`}>
+      <CardLink className="symbol-card__link" to={`/symbols/${symbol.repo_key}/${symbol.symbol_key}`}>
         <img src={symbol.image_url} alt="" loading="lazy" />
-      </Link>
-      <Link className="symbol-card__name" to={`/symbols/${symbol.repo_key}/${symbol.symbol_key}`}>
-        {symbol.name}
-      </Link>
-      <span className="symbol-card__meta">{symbol.repo_key}, {symbol.license || 'licence unknown'}</span>
+        <strong className="symbol-card__name">{symbol.name}</strong>
+        <span className="symbol-card__meta">{symbol.repo_key} · {symbol.license || 'licence unknown'}</span>
+      </CardLink>
     </article>
   )
 }
 
 export function RepositoryCard({ repository }: { repository: Repository }) {
   return (
-    <Link className="repository-card" to={`/repositories/${repository.repo_key}`}>
+    <CardLink className="repository-card" to={`/repositories/${repository.repo_key}`}>
       <img
         src={repository.logo_url}
         alt=""
@@ -52,6 +53,6 @@ export function RepositoryCard({ repository }: { repository: Repository }) {
       <strong>{repository.name}</strong>
       <span>{repository.attribution.license || 'mixed licences'}</span>
       <span>{repository.symbol_count.toLocaleString()} symbols</span>
-    </Link>
+    </CardLink>
   )
 }
