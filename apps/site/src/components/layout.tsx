@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { checkSession } from '../api'
 import { PageContainer } from './ui'
@@ -35,13 +35,43 @@ function useSession() {
   }
 }
 
+function useStickyHeaderOffset() {
+  const headerRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    const header = headerRef.current
+    if (!header) return
+
+    function updateOffset(height: number) {
+      if (height > 0) document.documentElement.style.setProperty('--site-header-height', `${height}px`)
+    }
+
+    updateOffset(header.getBoundingClientRect().height)
+    const observer = typeof ResizeObserver === 'undefined'
+      ? undefined
+      : new ResizeObserver((entries) => {
+        const entry = entries[0]
+        updateOffset(entry?.borderBoxSize[0]?.blockSize ?? entry?.contentRect.height ?? 0)
+      })
+    observer?.observe(header)
+
+    return () => {
+      observer?.disconnect()
+      document.documentElement.style.removeProperty('--site-header-height')
+    }
+  }, [])
+
+  return headerRef
+}
+
 export function SiteLayout({ children }: { children: ReactNode }) {
   const session = useSession()
+  const headerRef = useStickyHeaderOffset()
 
   return (
     <div className="site-shell">
       <a className="skip-link" href="#main">Skip to content</a>
-      <header className="site-header">
+      <header className="site-header site-header--sticky" ref={headerRef}>
         <PageContainer className="site-header__inner">
           <Link className="identity" to="/" aria-label="OpenSymbols home">
             <img src="/open-symbols-mark.svg" alt="" />

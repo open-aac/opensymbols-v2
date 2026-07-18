@@ -31,6 +31,7 @@
   --shadow-sm: 0 0.15rem 0.5rem rgb(23 36 43 / 10%);
   --shadow-md: 0 0.75rem 2rem rgb(23 36 43 / 12%);
   --page-width: 74rem;
+  --site-header-height: 5rem;
   color: var(--color-text);
   background: var(--color-canvas);
   font-family: var(--font-sans);
@@ -41,7 +42,10 @@
 }
 
 * { box-sizing: border-box; }
-html { background: var(--color-canvas); }
+html {
+  scroll-padding-top: calc(var(--site-header-height) + var(--space-3));
+  background: var(--color-canvas);
+}
 body { min-height: 100vh; margin: 0; }
 img { max-width: 100%; }
 button, input, select, textarea { font: inherit; }
@@ -54,6 +58,10 @@ p { text-wrap: pretty; }
   outline: 0.2rem solid var(--color-focus);
   outline-offset: 0.2rem;
   box-shadow: 0 0 0 0.12rem var(--color-surface);
+}
+
+:where(a, button, input, select, textarea, [tabindex]), :target {
+  scroll-margin-top: calc(var(--site-header-height) + var(--space-3));
 }
 
 .visually-hidden {
