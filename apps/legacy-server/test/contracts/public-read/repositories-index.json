@@ -1,0 +1,116 @@
+[
+  {
+    "name": "lists active public repositories in case-insensitive name order",
+    "request": {
+      "method": "GET",
+      "path": "/api/v2/repositories"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "repositories": [
+          {
+            "repo_key": "alpha",
+            "name": "alpha symbols",
+            "description": null,
+            "url": null,
+            "symbol_count": 0,
+            "logo_url": "/repositories/alpha.png",
+            "attribution": {
+              "license": null,
+              "license_url": null,
+              "author_name": null,
+              "author_url": null
+            }
+          },
+          {
+            "repo_key": "demo",
+            "name": "Demo Symbols",
+            "description": "Friendly symbols for contract testing.",
+            "url": "https://example.test/demo",
+            "symbol_count": 4,
+            "logo_url": "/repositories/demo.png",
+            "attribution": {
+              "license": "CC BY 4.0",
+              "license_url": "https://creativecommons.org/licenses/by/4.0/",
+              "author_name": "Contract Artist",
+              "author_url": "https://example.test/artist"
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "includes protected repositories for an administrator",
+    "request": {
+      "method": "GET",
+      "path": "/api/v2/repositories",
+      "credentials": "admin"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "repositories": [
+          {
+            "repo_key": "alpha",
+            "name": "alpha symbols",
+            "description": null,
+            "url": null,
+            "symbol_count": 0,
+            "logo_url": "/repositories/alpha.png",
+            "attribution": {
+              "license": null,
+              "license_url": null,
+              "author_name": null,
+              "author_url": null
+            }
+          },
+          {
+            "repo_key": "demo",
+            "name": "Demo Symbols",
+            "description": "Friendly symbols for contract testing.",
+            "url": "https://example.test/demo",
+            "symbol_count": 4,
+            "logo_url": "/repositories/demo.png",
+            "attribution": {
+              "license": "CC BY 4.0",
+              "license_url": "https://creativecommons.org/licenses/by/4.0/",
+              "author_name": "Contract Artist",
+              "author_url": "https://example.test/artist"
+            }
+          },
+          {
+            "repo_key": "protected",
+            "name": "Protected Symbols",
+            "description": "Only visible to administrators.",
+            "url": null,
+            "symbol_count": 1,
+            "logo_url": "/repositories/protected.png",
+            "attribution": {
+              "license": null,
+              "license_url": null,
+              "author_name": null,
+              "author_url": null
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "preserves the legacy invalid-token response",
+    "request": {
+      "method": "GET",
+      "path": "/api/v2/repositories",
+      "credentials": "invalid"
+    },
+    "response": {
+      "status": 400,
+      "body": {
+        "error": "invalid access token",
+        "invalid_token": true
+      }
+    }
+  }
+]
