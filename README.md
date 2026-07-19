@@ -54,8 +54,9 @@ Set `SITE_DIST_PATH` only when the site build is stored somewhere other than
 Hono derives its local read-only PostgreSQL connection from `POSTGRES_USER`,
 `POSTGRES_PASSWORD`, `POSTGRES_DB`, and `POSTGRES_PORT`, or uses an explicit
 `DATABASE_URL`. PostgreSQL is published only on the loopback interface. The
-typed store understands the legacy GoSecure `settings` format, but API routes
-remain owned by Rails until their individual migration is approved.
+typed store understands the legacy GoSecure `settings` format. Hono owns
+anonymous repository listing, repository detail, and symbol detail reads;
+credential-bearing requests and all other API routes remain with Rails.
 
 Seed the local database with repeatable demo repositories, symbols, defaults,
 requests, and an approved development API source:

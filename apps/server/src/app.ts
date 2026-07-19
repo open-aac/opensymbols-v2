@@ -1,12 +1,35 @@
 import { existsSync } from 'node:fs'
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { createLegacyProxy } from './legacy-proxy.js'
+import {
+  findPublicRepository,
+  findPublicSymbol,
+  listPublicRepositories,
+  type PublicReadImageOptions,
+} from './public-read-api.js'
+import type { PublicReadStore } from './public-read-store.js'
 
 export interface AppOptions {
   legacyServerUrl?: string
   legacyServerTimeoutMs?: number
+  publicReadStore?: PublicReadStore
+  s3Bucket?: string
+  s3Cdn?: string
   siteRoot?: string
+}
+
+function hasLegacyCredentials(context: Context) {
+  const url = new URL(context.req.url)
+  return context.req.raw.headers.has('authorization') ||
+    url.searchParams.has('access_token') ||
+    url.searchParams.has('search_token')
+}
+
+function isPublicReadPath(path: string) {
+  return path === '/api/v2/repositories' ||
+    /^\/api\/v2\/repositories\/[^/]+$/.test(path) ||
+    /^\/api\/v2\/symbols\/[^/]+\/[^/]+$/.test(path)
 }
 
 function legacyTimeoutFromEnvironment() {
@@ -30,6 +53,60 @@ export function createApp(options: AppOptions = {}) {
   })
 
   app.get('/api/health', (context) => context.json({ status: 'ok' as const }))
+
+  if (options.publicReadStore) {
+    const store = options.publicReadStore
+    const imageOptions: PublicReadImageOptions = {
+      s3Bucket: options.s3Bucket,
+      s3Cdn: options.s3Cdn,
+    }
+
+    app.use('/api/v2/*', (context, next) => {
+      if (context.req.method !== 'GET' && isPublicReadPath(context.req.path)) {
+        return legacyProxy(context)
+      }
+      return next()
+    })
+
+    app.get('/api/v2/repositories', async (context) => {
+      if (hasLegacyCredentials(context)) return legacyProxy(context)
+      try {
+        return context.json({ repositories: await listPublicRepositories(store) })
+      } catch {
+        return context.json({ error: 'database_unavailable' as const }, 503)
+      }
+    })
+
+    app.get('/api/v2/repositories/:repoKey', async (context) => {
+      if (hasLegacyCredentials(context)) return legacyProxy(context)
+      try {
+        const repoKey = context.req.param('repoKey')
+        const repository = await findPublicRepository(store, repoKey)
+        if (!repository) return context.json({ error: 'not found', id: repoKey }, 404)
+        return context.json({ repository })
+      } catch {
+        return context.json({ error: 'database_unavailable' as const }, 503)
+      }
+    })
+
+    app.get('/api/v2/symbols/:repoKey/:symbolKey', async (context) => {
+      if (hasLegacyCredentials(context)) return legacyProxy(context)
+      try {
+        const result = await findPublicSymbol(
+          store,
+          context.req.param('repoKey'),
+          context.req.param('symbolKey'),
+          imageOptions,
+        )
+        if (result.kind === 'not_found') {
+          return context.json({ error: 'not found', id: result.id }, 404)
+        }
+        return context.json({ symbol: result.symbol })
+      } catch {
+        return context.json({ error: 'database_unavailable' as const }, 503)
+      }
+    })
+  }
 
   app.all('/api/v1/*', legacyProxy)
   app.all('/api/v2/*', legacyProxy)
