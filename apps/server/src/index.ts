@@ -6,10 +6,15 @@ import { createPostgresPublicReadStore } from './public-read-store.js'
 
 const port = Number.parseInt(process.env.PORT ?? '3000', 10)
 const siteRoot = process.env.SITE_DIST_PATH ?? fileURLToPath(new URL('../../site/dist', import.meta.url))
-const app = createApp({ siteRoot })
 const publicReadStore = createPostgresPublicReadStore({
   connectionString: databaseUrlFromEnvironment(),
   encryptionKey: process.env.SECURE_ENCRYPTION_KEY,
+})
+const app = createApp({
+  siteRoot,
+  publicReadStore,
+  s3Bucket: process.env.S3_BUCKET,
+  s3Cdn: process.env.S3_CDN,
 })
 
 if (!Number.isInteger(port) || port < 1 || port > 65_535) {

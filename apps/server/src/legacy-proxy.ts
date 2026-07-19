@@ -1,4 +1,4 @@
-import type { Handler } from 'hono'
+import type { Context } from 'hono'
 import { proxy } from 'hono/proxy'
 
 export interface LegacyProxyOptions {
@@ -19,7 +19,7 @@ function normalizeServerUrl(serverUrl: string) {
   return url
 }
 
-export function createLegacyProxy(options: LegacyProxyOptions): Handler {
+export function createLegacyProxy(options: LegacyProxyOptions): (context: Context) => Promise<Response> {
   if (!Number.isInteger(options.timeoutMs) || options.timeoutMs < 1) {
     throw new Error('LEGACY_SERVER_TIMEOUT_MS must be a positive integer')
   }
