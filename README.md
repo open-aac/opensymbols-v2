@@ -25,6 +25,7 @@ pnpm dev
 - Site: http://localhost:5173
 - Server: http://localhost:3000
 - Legacy Rails server: http://localhost:3001 (loopback only)
+- PostgreSQL: 127.0.0.1:5432 (loopback only)
 - Health endpoint: http://localhost:3000/api/health
 
 `pnpm dev` builds and starts the disposable PostgreSQL and legacy Rails services
@@ -49,6 +50,12 @@ examples; it never stores submitted secrets or application details. After
 serves the Vite output and supports direct navigation to those client routes.
 Set `SITE_DIST_PATH` only when the site build is stored somewhere other than
 `apps/site/dist`.
+
+Hono derives its local read-only PostgreSQL connection from `POSTGRES_USER`,
+`POSTGRES_PASSWORD`, `POSTGRES_DB`, and `POSTGRES_PORT`, or uses an explicit
+`DATABASE_URL`. PostgreSQL is published only on the loopback interface. The
+typed store understands the legacy GoSecure `settings` format, but API routes
+remain owned by Rails until their individual migration is approved.
 
 Seed the local database with repeatable demo repositories, symbols, defaults,
 requests, and an approved development API source:
@@ -78,10 +85,12 @@ pnpm test
 pnpm build
 ```
 
-`pnpm test` runs both the pnpm workspace tests and the Rails test suite against
-a disposable test database. Useful legacy-service commands are
+`pnpm test` runs the pnpm workspace tests, the Hono store integration test
+against a disposable PostgreSQL database, and the Rails test suite. Useful
+service commands are
 `pnpm legacy:up`, `pnpm legacy:seed`, `pnpm legacy:logs`, `pnpm test:legacy`, and
-`pnpm legacy:down`.
+`pnpm legacy:down`; `pnpm test:database` runs only the disposable Hono database
+integration test.
 
 ## Workspace
 
