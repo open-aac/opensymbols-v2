@@ -1,0 +1,163 @@
+[
+  {
+    "name": "shows a public symbol with localized fallback and metadata flags",
+    "request": {
+      "method": "GET",
+      "path": "/api/v2/symbols/demo/hello"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "symbol": {
+          "id": 2101,
+          "symbol_key": "hello",
+          "name": "Base hello",
+          "description": "A friendly hc greeting.",
+          "locale": "en",
+          "license": "CC BY 4.0",
+          "license_url": "https://creativecommons.org/licenses/by/4.0/",
+          "enabled": true,
+          "author": "Contract Artist",
+          "author_url": "https://example.test/artist",
+          "source_url": "https://example.test/source/hello",
+          "repo_key": "demo",
+          "hc": true,
+          "protected_symbol": false,
+          "extension": "svg",
+          "image_url": "https://assets.example.test/hello.svg",
+          "search_string": "base hello - a friendly hc greeting, ,",
+          "unsafe_result": true,
+          "skins": true,
+          "_href": "/api/v1/symbols/demo/hello?id=2101",
+          "details_url": "/symbols/demo/hello?id=2101"
+        }
+      }
+    }
+  },
+  {
+    "name": "rewrites a stored S3 image URL to the configured CDN",
+    "request": {
+      "method": "GET",
+      "path": "/api/v2/symbols/demo/cdn-image"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "symbol": {
+          "id": 2102,
+          "symbol_key": "cdn-image",
+          "name": "CDN image",
+          "description": null,
+          "locale": "en",
+          "license": null,
+          "license_url": null,
+          "enabled": true,
+          "author": null,
+          "author_url": null,
+          "source_url": null,
+          "repo_key": "demo",
+          "hc": false,
+          "protected_symbol": false,
+          "extension": "png",
+          "image_url": "https://cdn.example.test/libraries/demo/cdn-image.png",
+          "search_string": "cdn image - , ,",
+          "unsafe_result": false,
+          "skins": false,
+          "_href": "/api/v1/symbols/demo/cdn-image?id=2102",
+          "details_url": "/symbols/demo/cdn-image?id=2102"
+        }
+      }
+    }
+  },
+  {
+    "name": "hides a disabled symbol",
+    "request": {
+      "method": "GET",
+      "path": "/api/v2/symbols/demo/disabled"
+    },
+    "response": {
+      "status": 404,
+      "body": {
+        "error": "not found",
+        "id": "demo/disabled"
+      }
+    }
+  },
+  {
+    "name": "hides a protected symbol from an anonymous request",
+    "request": {
+      "method": "GET",
+      "path": "/api/v2/symbols/demo/private-symbol"
+    },
+    "response": {
+      "status": 404,
+      "body": {
+        "error": "not found",
+        "id": "demo/private-symbol"
+      }
+    }
+  },
+  {
+    "name": "preserves the legacy inactive-repository symbol visibility quirk",
+    "request": {
+      "method": "GET",
+      "path": "/api/v2/symbols/inactive/still-visible"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "symbol": {
+          "id": 2105,
+          "symbol_key": "still-visible",
+          "name": "Still visible",
+          "description": null,
+          "locale": "en",
+          "license": null,
+          "license_url": null,
+          "enabled": true,
+          "author": null,
+          "author_url": null,
+          "source_url": null,
+          "repo_key": "inactive",
+          "hc": false,
+          "protected_symbol": false,
+          "extension": "svg",
+          "image_url": "https://assets.example.test/still-visible.svg",
+          "search_string": "still visible - , ,",
+          "unsafe_result": false,
+          "skins": false,
+          "_href": "/api/v1/symbols/inactive/still-visible?id=2105",
+          "details_url": "/symbols/inactive/still-visible?id=2105"
+        }
+      }
+    }
+  },
+  {
+    "name": "hides symbols in a protected repository",
+    "request": {
+      "method": "GET",
+      "path": "/api/v2/symbols/protected/secret"
+    },
+    "response": {
+      "status": 404,
+      "body": {
+        "error": "not found",
+        "id": "protected"
+      }
+    }
+  },
+  {
+    "name": "returns the exact missing-symbol response",
+    "request": {
+      "method": "GET",
+      "path": "/api/v2/symbols/demo/missing"
+    },
+    "response": {
+      "status": 404,
+      "body": {
+        "error": "not found",
+        "id": "demo/missing"
+      }
+    }
+  }
+]

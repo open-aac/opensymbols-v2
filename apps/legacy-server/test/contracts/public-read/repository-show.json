@@ -1,0 +1,70 @@
+[
+  {
+    "name": "shows a public repository with complete attribution metadata",
+    "request": {
+      "method": "GET",
+      "path": "/api/v2/repositories/demo"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "repository": {
+          "repo_key": "demo",
+          "name": "Demo Symbols",
+          "description": "Friendly symbols for contract testing.",
+          "url": "https://example.test/demo",
+          "symbol_count": 4,
+          "logo_url": "/repositories/demo.png",
+          "attribution": {
+            "license": "CC BY 4.0",
+            "license_url": "https://creativecommons.org/licenses/by/4.0/",
+            "author_name": "Contract Artist",
+            "author_url": "https://example.test/artist"
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "hides an inactive repository",
+    "request": {
+      "method": "GET",
+      "path": "/api/v2/repositories/inactive"
+    },
+    "response": {
+      "status": 404,
+      "body": {
+        "error": "not found",
+        "id": "inactive"
+      }
+    }
+  },
+  {
+    "name": "hides a protected repository from an anonymous request",
+    "request": {
+      "method": "GET",
+      "path": "/api/v2/repositories/protected"
+    },
+    "response": {
+      "status": 404,
+      "body": {
+        "error": "not found",
+        "id": "protected"
+      }
+    }
+  },
+  {
+    "name": "returns the exact missing-repository response",
+    "request": {
+      "method": "GET",
+      "path": "/api/v2/repositories/missing"
+    },
+    "response": {
+      "status": 404,
+      "body": {
+        "error": "not found",
+        "id": "missing"
+      }
+    }
+  }
+]
