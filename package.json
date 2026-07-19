@@ -17,8 +17,9 @@
     "build": "pnpm --filter @opensymbols/site --filter @opensymbols/server build",
     "typecheck": "pnpm --filter @opensymbols/site --filter @opensymbols/server typecheck",
     "lint": "eslint apps/site apps/server",
-    "test": "pnpm test:apps && pnpm test:legacy",
+    "test": "pnpm test:apps && pnpm test:database && pnpm test:legacy",
     "test:apps": "pnpm --filter @opensymbols/site --filter @opensymbols/server test",
+    "test:database": "docker compose up -d --wait postgres && pnpm --filter @opensymbols/server test:database",
     "test:legacy": "docker compose build legacy-server && docker compose run --rm -e RAILS_ENV=test -e DATABASE_URL=postgresql://opensymbols:opensymbols@postgres:5432/opensymbols_test legacy-server bundle exec rails db:create db:schema:load test"
   },
   "devDependencies": {

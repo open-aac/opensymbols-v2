@@ -1,10 +1,16 @@
 import { fileURLToPath } from 'node:url'
 import { serve } from '@hono/node-server'
 import { createApp } from './app.js'
+import { databaseUrlFromEnvironment } from './database-config.js'
+import { createPostgresPublicReadStore } from './public-read-store.js'
 
 const port = Number.parseInt(process.env.PORT ?? '3000', 10)
 const siteRoot = process.env.SITE_DIST_PATH ?? fileURLToPath(new URL('../../site/dist', import.meta.url))
 const app = createApp({ siteRoot })
+const publicReadStore = createPostgresPublicReadStore({
+  connectionString: databaseUrlFromEnvironment(),
+  encryptionKey: process.env.SECURE_ENCRYPTION_KEY,
+})
 
 if (!Number.isInteger(port) || port < 1 || port > 65_535) {
   throw new Error('PORT must be an integer between 1 and 65535')
@@ -14,9 +20,19 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(`OpenSymbols server listening on http://localhost:${info.port}`)
 })
 
+let shuttingDown = false
+
 function shutdown(signal: string) {
+  if (shuttingDown) return
+  shuttingDown = true
   console.log(`Received ${signal}; shutting down`)
-  server.close((error) => {
+  server.close(async (error) => {
+    try {
+      await publicReadStore.close()
+    } catch (databaseError) {
+      console.error(databaseError)
+      process.exitCode = 1
+    }
     if (error) {
       console.error(error)
       process.exitCode = 1
