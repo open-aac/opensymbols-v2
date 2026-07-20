@@ -18,6 +18,7 @@ function RootApplication() {
   const application = publishableKey
     ? (
         <ClerkProvider
+          afterSignOutUrl="/"
           publishableKey={publishableKey}
           signInFallbackRedirectUrl="/account"
           signInUrl="/sign-in"

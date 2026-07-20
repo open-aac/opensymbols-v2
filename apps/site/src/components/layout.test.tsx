@@ -5,6 +5,10 @@ import { expectNoAccessibilityViolations } from '../test/axe'
 import { AppAuthProvider, type AppAuthValue } from '../features/authentication'
 import { SiteLayout } from './layout'
 
+vi.mock('../features/clerk-user-control', () => ({
+  ClerkUserControl: () => <button aria-label="Open account menu">Account avatar</button>,
+}))
+
 class HeaderResizeObserver {
   static height = 84
   observe = vi.fn(() => {
@@ -70,8 +74,7 @@ describe('site layout', () => {
     expect(screen.getByRole('link', { name: 'OpenAAC administrator sign in' })).toHaveAttribute('href', '/login')
   })
 
-  it('shows the signed-in account and signs out without exposing a token', () => {
-    const signOut = vi.fn(async () => undefined)
+  it('shows the Clerk account control for a signed-in person without exposing a token', () => {
     const auth: AppAuthValue = {
       configured: true,
       loaded: true,
@@ -79,7 +82,7 @@ describe('site layout', () => {
       userId: 'user_demo',
       displayName: 'Demo Person',
       getToken: async () => 'clerk-session-token',
-      signOut,
+      signOut: async () => undefined,
     }
     render(
       <MemoryRouter>
@@ -89,9 +92,9 @@ describe('site layout', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByRole('link', { name: 'Demo Person' })).toHaveAttribute('href', '/account')
-    screen.getByRole('button', { name: 'Sign out' }).click()
-    expect(signOut).toHaveBeenCalledOnce()
+    expect(screen.getByRole('button', { name: 'Open account menu' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Demo Person' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument()
     expect(window.localStorage.getItem('clerk-session-token')).toBeNull()
   })
 })

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { checkSession } from '../api'
 import { useAppAuth } from '../features/authentication'
+import { ClerkUserControl } from '../features/clerk-user-control'
 import { PageContainer } from './ui'
 import './layout.css'
 
@@ -88,12 +89,7 @@ export function SiteLayout({ children }: { children: ReactNode }) {
             <a href="https://www.openaac.org">OpenAAC</a>
             {account.configured && account.loaded && !account.signedIn && <Link to="/sign-in">Sign in</Link>}
             {account.configured && account.loaded && !account.signedIn && <Link to="/sign-up">Create account</Link>}
-            {account.configured && account.loaded && account.signedIn && (
-              <Link to="/account">{account.displayName || 'Your account'}</Link>
-            )}
-            {account.configured && account.loaded && account.signedIn && (
-              <button onClick={() => void account.signOut()}>Sign out</button>
-            )}
+            {account.configured && account.loaded && account.signedIn && <ClerkUserControl />}
             {adminSession.userName && <a href="/admin">Admin: {adminSession.userName}</a>}
             {adminSession.userName && <button onClick={adminSession.logout}>Admin log out</button>}
           </nav>
