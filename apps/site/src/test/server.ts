@@ -3,6 +3,12 @@ import { setupServer } from 'msw/node'
 import { repository, smallerRepository, symbol } from './fixtures'
 
 export const handlers = [
+  http.get('/api/app/session', ({ request }) => {
+    if (request.headers.get('Authorization') !== 'Bearer clerk-session-token') {
+      return HttpResponse.json({ error: 'authentication_required' }, { status: 401 })
+    }
+    return HttpResponse.json({ user_id: 'user_demo' })
+  }),
   http.post('/api/v2/token', () => HttpResponse.json({
     access_token: 'token::demo-access-token',
     expires: '2026-07-18T12:00:00Z',

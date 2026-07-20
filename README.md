@@ -77,6 +77,36 @@ Elasticsearch URL is configured. The fallback preserves the existing symbol
 search response and visibility rules, so the React search page works without
 cloud services. Production continues to require Elasticsearch.
 
+## User accounts
+
+OpenSymbols user accounts use Clerk when the optional Clerk environment values
+are configured. Public browsing, search, repositories, symbols, and API
+documentation continue to work without Clerk.
+
+For local development, create a Clerk development application that allows
+email verification codes, then copy `.env.example` to `.env` and set:
+
+- `VITE_CLERK_PUBLISHABLE_KEY` to the Clerk publishable key.
+- `CLERK_JWT_KEY` to Clerk's PEM-formatted JWT public key. This is server-only.
+- `CLERK_AUTHORIZED_PARTIES` to the comma-separated browser origins allowed to
+  send tokens, including the exact local origin you use.
+
+In the Clerk dashboard, disable password and social sign-in methods for this
+development application and leave email verification code as the only sign-in
+and sign-up method. Add both local origins if you alternate between `localhost`
+and `127.0.0.1`. Restart `pnpm dev` after changing `.env`.
+
+The React site owns `/sign-in/*`, `/sign-up/*`, and `/account`. Hono verifies
+short-lived Clerk bearer tokens at `/api/app/session`; it never accepts a Clerk
+secret key. Clerk's browser SDK manages its own session and this application
+does not copy Clerk tokens into local storage, session storage, URLs, logs, or
+the legacy Rails authentication cookie.
+
+The existing `/login` and `/admin` routes remain the separate legacy OpenAAC
+administrator flow. No Clerk-to-Rails user record synchronization, database
+user table, webhook, roles, saved characters, symbol packs, or personalization
+is included yet.
+
 ## Verify
 
 ```sh

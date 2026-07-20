@@ -13,6 +13,12 @@ import type { InteractiveApiResult } from './api'
 import { PageState, SymbolCard } from './components'
 import { SiteLayout } from './components/layout'
 import { DiscoveryPage } from './features/discovery'
+import {
+  AccountPage,
+  RequireAuthentication,
+  SignInPage,
+  SignUpPage,
+} from './features/authentication'
 import { useAsync } from './hooks'
 import type { SymbolResult } from './types'
 
@@ -463,6 +469,12 @@ export function App() {
         <Route path="/api" element={<ApiDocumentationPage />} />
         <Route path="/repositories/:repoKey" element={<RepositoryPage />} />
         <Route path="/symbols/:repoKey/:symbolKey" element={<SymbolPage />} />
+        <Route path="/sign-in/*" element={<SignInPage />} />
+        <Route path="/sign-up/*" element={<SignUpPage />} />
+        <Route
+          path="/account"
+          element={<RequireAuthentication><AccountPage /></RequireAuthentication>}
+        />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </SiteLayout>
