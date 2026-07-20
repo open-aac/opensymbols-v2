@@ -18,6 +18,10 @@ export interface SharedSecretResponse {
   shared_secret: string
 }
 
+export interface AppSessionResponse {
+  user_id: string
+}
+
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) {
     super(message)
@@ -172,4 +176,20 @@ export function searchPublicApi(options: {
   return interactiveRequest<SymbolResult[]>(`/api/v2/symbols?${params}`, {
     headers: { Authorization: options.accessToken },
   })
+}
+
+export async function getAppSession(getToken: () => Promise<string | null>) {
+  const token = await getToken()
+  if (!token) throw new ApiError('Authentication required', 401)
+
+  const response = await fetch('/api/app/session', {
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  })
+  if (!response.ok) {
+    throw new ApiError(`Request failed with status ${response.status}`, response.status)
+  }
+  return response.json() as Promise<AppSessionResponse>
 }

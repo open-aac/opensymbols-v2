@@ -9,6 +9,7 @@ import {
   type PublicReadImageOptions,
 } from './public-read-api.js'
 import type { PublicReadStore } from './public-read-store.js'
+import type { AppSessionVerifier } from './clerk-auth.js'
 
 export interface AppOptions {
   legacyServerUrl?: string
@@ -17,6 +18,7 @@ export interface AppOptions {
   s3Bucket?: string
   s3Cdn?: string
   siteRoot?: string
+  appSessionVerifier?: AppSessionVerifier
 }
 
 function hasLegacyCredentials(context: Context) {
@@ -53,6 +55,21 @@ export function createApp(options: AppOptions = {}) {
   })
 
   app.get('/api/health', (context) => context.json({ status: 'ok' as const }))
+
+  app.get('/api/app/session', async (context) => {
+    if (!options.appSessionVerifier) {
+      return context.json({ error: 'authentication_unconfigured' as const }, 503)
+    }
+
+    const session = await options.appSessionVerifier.verify(context.req.raw)
+    if (!session) {
+      return context.json({ error: 'authentication_required' as const }, 401)
+    }
+
+    return context.json({ user_id: session.userId })
+  })
+
+  app.all('/api/app/*', (context) => context.json({ error: 'not_found' as const }, 404))
 
   if (options.publicReadStore) {
     const store = options.publicReadStore

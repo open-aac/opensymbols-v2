@@ -12,6 +12,48 @@ describe('GET /api/health', () => {
   })
 })
 
+describe('Clerk-authenticated application API', () => {
+  it('reports missing local Clerk configuration without affecting health', async () => {
+    const response = await app.request('/api/app/session')
+
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toEqual({ error: 'authentication_unconfigured' })
+    expect((await app.request('/api/health')).status).toBe(200)
+  })
+
+  it('returns the verified user and rejects invalid sessions', async () => {
+    const appWithAuth = createApp({
+      appSessionVerifier: {
+        verify: async (request) => request.headers.get('authorization') === 'Bearer valid'
+          ? { userId: 'user_example' }
+          : null,
+      },
+    })
+
+    const valid = await appWithAuth.request('/api/app/session', {
+      headers: { Authorization: 'Bearer valid' },
+    })
+    const invalid = await appWithAuth.request('/api/app/session', {
+      headers: { Authorization: 'Bearer invalid' },
+    })
+
+    expect(valid.status).toBe(200)
+    await expect(valid.json()).resolves.toEqual({ user_id: 'user_example' })
+    expect(invalid.status).toBe(401)
+    await expect(invalid.json()).resolves.toEqual({ error: 'authentication_required' })
+  })
+
+  it('does not proxy unknown application routes to Rails', async () => {
+    const response = await createApp({
+      legacyServerUrl: 'http://127.0.0.1:1',
+      appSessionVerifier: { verify: async () => ({ userId: 'user_example' }) },
+    }).request('/api/app/not-a-route')
+
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toEqual({ error: 'not_found' })
+  })
+})
+
 describe('React site delivery', () => {
   const siteRoot = fileURLToPath(new URL('./test-fixtures/site', import.meta.url))
 

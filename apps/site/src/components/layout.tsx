@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { checkSession } from '../api'
+import { useAppAuth } from '../features/authentication'
 import { PageContainer } from './ui'
 import './layout.css'
 
@@ -65,7 +66,8 @@ function useStickyHeaderOffset() {
 }
 
 export function SiteLayout({ children }: { children: ReactNode }) {
-  const session = useSession()
+  const adminSession = useSession()
+  const account = useAppAuth()
   const headerRef = useStickyHeaderOffset()
 
   return (
@@ -84,8 +86,16 @@ export function SiteLayout({ children }: { children: ReactNode }) {
             <Link to="/search">Search symbols</Link>
             <Link to="/api">API documentation</Link>
             <a href="https://www.openaac.org">OpenAAC</a>
-            {session.userName && <a href="/admin">{session.userName}</a>}
-            {session.userName && <button onClick={session.logout}>Log out</button>}
+            {account.configured && account.loaded && !account.signedIn && <Link to="/sign-in">Sign in</Link>}
+            {account.configured && account.loaded && !account.signedIn && <Link to="/sign-up">Create account</Link>}
+            {account.configured && account.loaded && account.signedIn && (
+              <Link to="/account">{account.displayName || 'Your account'}</Link>
+            )}
+            {account.configured && account.loaded && account.signedIn && (
+              <button onClick={() => void account.signOut()}>Sign out</button>
+            )}
+            {adminSession.userName && <a href="/admin">Admin: {adminSession.userName}</a>}
+            {adminSession.userName && <button onClick={adminSession.logout}>Admin log out</button>}
           </nav>
         </PageContainer>
       </header>
@@ -93,7 +103,7 @@ export function SiteLayout({ children }: { children: ReactNode }) {
       <footer className="site-footer">
         <PageContainer>
           <p>OpenSymbols is <a href="https://github.com/open-aac/opensymbols">open source</a> and powered by <a href="https://www.openaac.org">OpenAAC</a>.</p>
-          <a className="footer-admin" href="/login">Admin sign in</a>
+          <a className="footer-admin" href="/login">OpenAAC administrator sign in</a>
         </PageContainer>
       </footer>
     </div>

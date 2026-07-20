@@ -3,6 +3,7 @@ import { serve } from '@hono/node-server'
 import { createApp } from './app.js'
 import { databaseUrlFromEnvironment } from './database-config.js'
 import { createPostgresPublicReadStore } from './public-read-store.js'
+import { clerkSessionVerifierFromEnvironment } from './clerk-auth.js'
 
 const port = Number.parseInt(process.env.PORT ?? '3000', 10)
 const siteRoot = process.env.SITE_DIST_PATH ?? fileURLToPath(new URL('../../site/dist', import.meta.url))
@@ -15,6 +16,7 @@ const app = createApp({
   publicReadStore,
   s3Bucket: process.env.S3_BUCKET,
   s3Cdn: process.env.S3_CDN,
+  appSessionVerifier: clerkSessionVerifierFromEnvironment(),
 })
 
 if (!Number.isInteger(port) || port < 1 || port > 65_535) {

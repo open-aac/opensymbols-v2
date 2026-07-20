@@ -1,0 +1,41 @@
+.auth-page,
+.account-page {
+  max-width: 44rem;
+}
+
+.auth-page > p:not(.eyebrow),
+.account-page > p:not(.eyebrow) {
+  max-width: 40rem;
+  color: var(--color-text-muted);
+}
+
+.auth-component {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-6);
+}
+
+.auth-component > * {
+  max-width: 100%;
+}
+
+.account-session {
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.account-session--verified {
+  background: var(--color-accent-soft);
+  border-color: var(--color-action);
+}
+
+.account-session--failed {
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+@media (forced-colors: active) {
+  .account-session { border-color: CanvasText; }
+}

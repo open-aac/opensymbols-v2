@@ -5,6 +5,7 @@ const serverTarget = process.env.VITE_SERVER_PROXY_TARGET ?? 'http://localhost:3
 
 export default defineConfig({
   plugins: [react()],
+  envDir: '../..',
   server: {
     proxy: {
       '/api/': serverTarget,
