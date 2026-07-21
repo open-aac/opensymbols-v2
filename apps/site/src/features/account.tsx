@@ -1,7 +1,20 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { getAppSession } from '../api'
-import { Button, ButtonLink, CardLink, ResponsiveGrid, SectionHeading } from '../components/ui'
+import {
+  Avatar,
+  Badge,
+  Button,
+  ButtonLink,
+  CardLink,
+  EmptyState,
+  FormActions,
+  PageSection,
+  ResponsiveGrid,
+  SectionHeading,
+  StatusMessage,
+  Surface,
+} from '../components/ui'
 import { useAppAuth } from './authentication'
 import './account.css'
 
@@ -33,33 +46,22 @@ const areas = {
   },
 } as const
 
-function initials(name: string | undefined) {
-  const parts = name?.trim().split(/\s+/).filter(Boolean) ?? []
-  if (parts.length === 0) return 'OS'
-  return `${parts[0]?.[0] ?? 'O'}${parts.length > 1 ? parts.at(-1)?.[0] ?? '' : ''}`.toUpperCase()
-}
-
 function ProfileAvatar() {
   const auth = useAppAuth()
-
-  if (auth.imageUrl) {
-    return <img className="account-profile__avatar" src={auth.imageUrl} alt="" />
-  }
-
-  return <span className="account-profile__avatar account-profile__initials" aria-hidden="true">{initials(auth.displayName)}</span>
+  return <Avatar className="account-profile__avatar" imageUrl={auth.imageUrl} name={auth.displayName} />
 }
 
 function SessionNotice({ state }: { state: ServerState }) {
   if (state === 'verified') return null
 
   if (state === 'checking') {
-    return <p className="account-session" role="status">Checking your secure server session…</p>
+    return <StatusMessage className="account-session" status="status">Checking your secure server session…</StatusMessage>
   }
 
   return (
-    <p className="account-session account-session--failed" role="alert">
+    <StatusMessage className="account-session" status="alert">
       Your browser session is active, but the server could not verify it. Try signing in again if this continues.
-    </p>
+    </StatusMessage>
   )
 }
 
@@ -80,7 +82,7 @@ export function AccountLayout() {
   }, [auth.getToken, auth.userId])
 
   return (
-    <section className="content-page account-dashboard">
+    <PageSection className="account-dashboard">
       <header className="account-profile">
         <ProfileAvatar />
         <div>
@@ -103,11 +105,11 @@ export function AccountLayout() {
             </NavLink>
           ))}
         </nav>
-        <div className="account-dashboard__content">
+        <Surface className="account-dashboard__content">
           <Outlet />
-        </div>
+        </Surface>
       </div>
-    </section>
+    </PageSection>
   )
 }
 
@@ -140,7 +142,7 @@ export function AccountOverviewPage() {
       <ResponsiveGrid className="account-area-grid">
         {dashboardAreas.map((area) => (
           <CardLink className="account-area-card" key={area.to} to={area.to}>
-            <span className="account-badge">Coming soon</span>
+            <Badge>Coming soon</Badge>
             <h3>{area.title}</h3>
             <p>{area.description}</p>
             <span className="account-area-card__link">View area <span aria-hidden="true">→</span></span>
@@ -155,13 +157,14 @@ export function AccountAreaPage({ area }: { area: keyof typeof areas }) {
   const content = areas[area]
 
   return (
-    <div className="account-section account-empty-state">
-      <p className="eyebrow">{content.eyebrow}</p>
-      <span className="account-badge">Coming soon</span>
-      <h2>{content.title}</h2>
-      <p>{content.description}</p>
-      <ButtonLink to="/search">Explore the public symbol library</ButtonLink>
-    </div>
+    <EmptyState
+      className="account-section account-empty-state"
+      eyebrow={content.eyebrow}
+      badge={<Badge>Coming soon</Badge>}
+      heading={content.title}
+      description={content.description}
+      action={<ButtonLink to="/search">Explore the public symbol library</ButtonLink>}
+    />
   )
 }
 
@@ -174,7 +177,7 @@ export function AccountSettingsPage() {
         title="Account settings"
         description="Your identity and sign-in security are managed securely by Clerk."
       />
-      <div className="account-settings-card">
+      <Surface className="account-settings-card" tone="muted">
         <div className="account-settings-card__identity">
           <ProfileAvatar />
           <div>
@@ -182,11 +185,11 @@ export function AccountSettingsPage() {
             {auth.email && <p>{auth.email}</p>}
           </div>
         </div>
-        <div className="account-settings-card__actions">
+        <FormActions className="account-settings-card__actions">
           <Button variant="primary" onClick={auth.manageAccount}>Manage account</Button>
           <Button onClick={() => void auth.signOut()}>Sign out</Button>
-        </div>
-      </div>
+        </FormActions>
+      </Surface>
     </div>
   )
 }

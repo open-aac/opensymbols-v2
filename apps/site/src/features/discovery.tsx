@@ -1,8 +1,22 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getRepositories, randomSymbols, searchSymbols, submitSymbolRequest } from '../api'
-import { PageState, RepositoryCard, SymbolCard } from '../components'
-import { Button, ButtonLink, PageContainer, ResponsiveGrid, SectionHeading, TextField } from '../components/ui'
+import { RepositoryCard, SymbolCard } from '../components'
+import {
+  Button,
+  ButtonAnchor,
+  ButtonLink,
+  EmptyState,
+  FormActions,
+  PageContainer,
+  PageState,
+  ResponsiveGrid,
+  SectionHeading,
+  StatusMessage,
+  Surface,
+  TextAreaField,
+  TextField,
+} from '../components/ui'
 import { useAsync } from '../hooks'
 import './discovery.css'
 
@@ -25,10 +39,10 @@ function SearchForm({ query }: { query: string }) {
         onChange={(event) => setValue(event.target.value)}
         placeholder="Try hello, food, school…"
       />
-      <div className="discovery-search__actions">
+      <FormActions className="discovery-search__actions">
         <Button variant="primary" type="submit">Search</Button>
         {query && <Button type="button" onClick={() => { setValue(''); navigate('/') }}>Clear search</Button>}
-      </div>
+      </FormActions>
     </form>
   )
 }
@@ -58,25 +72,24 @@ function SymbolRequest({ query }: { query: string }) {
       <p>Suggest a symbol for the collection, or search open-licensed images elsewhere.</p>
       <div className="request-actions">
         <Button variant="secondary" onClick={() => setOpen(true)}>Suggest a symbol</Button>
-        <a className="standalone-link" target="_blank" rel="noreferrer" href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(query)}&tbs=sur:fc`}>Search Google Images</a>
-        <a className="standalone-link" target="_blank" rel="noreferrer" href={`https://www.flickr.com/search/?l=cc&ct=0&mt=all&adv=1&q=${encodeURIComponent(query)}`}>Search Flickr</a>
+        <ButtonAnchor variant="quiet" target="_blank" rel="noreferrer" href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(query)}&tbs=sur:fc`}>Search Google Images</ButtonAnchor>
+        <ButtonAnchor variant="quiet" target="_blank" rel="noreferrer" href={`https://www.flickr.com/search/?l=cc&ct=0&mt=all&adv=1&q=${encodeURIComponent(query)}`}>Search Flickr</ButtonAnchor>
       </div>
-      {status && <p className="request-status" role="status">{status}</p>}
+      {status && <StatusMessage className="request-status" status="status">{status}</StatusMessage>}
       {open && (
-        <form className="stacked-form" onSubmit={submit}>
-          <h3>Request a different symbol</h3>
-          <p>Tell us which symbol you would like to see. Requests help symbol donors know where to start.</p>
-          <TextField id="request-name" label="Symbol label" required value={name} onChange={(event) => setName(event.target.value)} />
-          <TextField id="request-letter" label="First letter of the symbol label" hint="For example, “b” for “bacon”. This helps prevent automated requests." required maxLength={1} value={firstLetter} onChange={(event) => setFirstLetter(event.target.value)} />
-          <label className="field" htmlFor="request-description">
-            <span className="field__label">Description</span>
-            <textarea className="field__control" id="request-description" required rows={4} value={comments} onChange={(event) => setComments(event.target.value)} />
-          </label>
-          <div className="form-actions">
-            <Button variant="primary" type="submit">Request symbol</Button>
-            <Button type="button" onClick={() => setOpen(false)}>Cancel</Button>
-          </div>
-        </form>
+        <Surface className="stacked-form-surface">
+          <form className="stacked-form" onSubmit={submit}>
+            <h3>Request a different symbol</h3>
+            <p>Tell us which symbol you would like to see. Requests help symbol donors know where to start.</p>
+            <TextField id="request-name" label="Symbol label" required value={name} onChange={(event) => setName(event.target.value)} />
+            <TextField id="request-letter" label="First letter of the symbol label" hint="For example, “b” for “bacon”. This helps prevent automated requests." required maxLength={1} value={firstLetter} onChange={(event) => setFirstLetter(event.target.value)} />
+            <TextAreaField id="request-description" label="Description" required rows={4} value={comments} onChange={(event) => setComments(event.target.value)} />
+            <FormActions>
+              <Button variant="primary" type="submit">Request symbol</Button>
+              <Button type="button" onClick={() => setOpen(false)}>Cancel</Button>
+            </FormActions>
+          </form>
+        </Surface>
       )}
     </section>
   )
@@ -116,10 +129,7 @@ export function DiscoveryPage() {
               {results.data?.map((symbol) => <SymbolCard key={symbol.id} symbol={symbol} />)}
             </ResponsiveGrid>
           ) : (
-            <div className="empty-state">
-              <h2>No matching symbols</h2>
-              <p>Try a broader word, a synonym, or make a request below.</p>
-            </div>
+            <EmptyState heading="No matching symbols" description="Try a broader word, a synonym, or make a request below." />
           )}
         </PageState>
         <SymbolRequest key={query} query={query} />
@@ -146,10 +156,10 @@ export function DiscoveryPage() {
               {sortedRepositories.map((repository) => <RepositoryCard key={repository.repo_key} repository={repository} />)}
             </ResponsiveGrid>
           ) : (
-            <div className="empty-state">
-              <h2>No symbol repositories are configured</h2>
-              <p>Run <code>pnpm legacy:seed</code> to add local demonstration symbols.</p>
-            </div>
+            <EmptyState
+              heading="No symbol repositories are configured"
+              description={<>Run <code>pnpm legacy:seed</code> to add local demonstration symbols.</>}
+            />
           )}
         </PageState>
       </section>
