@@ -78,7 +78,6 @@ export function SiteLayout({ children }: { children: ReactNode }) {
         <PageContainer className="site-header__inner">
           <div className="identity-lockup">
             <Link className="identity" to="/" aria-label="Open Symbols home">
-              <img src="/open-symbols-mark.svg" alt="" />
               <strong>Open Symbols</strong>
             </Link>
             <BrandEndorsement

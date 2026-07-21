@@ -64,6 +64,7 @@ describe('site layout', () => {
     const badge = endorsementLink.querySelector('img')
     const navigation = within(screen.getByRole('navigation', { name: 'Primary navigation' }))
 
+    expect(homeLink.querySelector('img')).not.toBeInTheDocument()
     expect(endorsementLink).toHaveAttribute('href', 'https://www.openaac.org')
     expect(endorsementLink).toHaveTextContent('by')
     expect(endorsementLink).not.toHaveTextContent('-')
