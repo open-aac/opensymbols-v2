@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { checkSession } from '../api'
 import { useAppAuth } from '../features/authentication'
@@ -6,9 +6,7 @@ import { ClerkUserControl } from '../features/clerk-user-control'
 import { BrandEndorsement, PageContainer } from './ui'
 import './layout.css'
 
-function useSession() {
-  const [userName, setUserName] = useState<string>()
-
+function useLegacySessionBridge() {
   useEffect(() => {
     const token = localStorage.getItem('auth_token')
     if (!token) return
@@ -17,7 +15,6 @@ function useSession() {
       .then((session) => {
         if (!session.valid) throw new Error('Invalid session')
         const refreshedToken = session.refresh_token || token
-        setUserName(session.user_name || 'User')
         localStorage.setItem('auth_token', refreshedToken)
         document.cookie = `auth=${refreshedToken};path=/;SameSite=Lax`
       })
@@ -26,15 +23,6 @@ function useSession() {
         document.cookie = 'auth=;path=/;max-age=0;SameSite=Lax'
       })
   }, [])
-
-  return {
-    userName,
-    logout() {
-      localStorage.removeItem('auth_token')
-      document.cookie = 'auth=;path=/;max-age=0;SameSite=Lax'
-      window.location.assign('/')
-    },
-  }
 }
 
 function useStickyHeaderOffset() {
@@ -67,7 +55,7 @@ function useStickyHeaderOffset() {
 }
 
 export function SiteLayout({ children }: { children: ReactNode }) {
-  const adminSession = useSession()
+  useLegacySessionBridge()
   const account = useAppAuth()
   const headerRef = useStickyHeaderOffset()
 
@@ -92,8 +80,6 @@ export function SiteLayout({ children }: { children: ReactNode }) {
             {account.configured && account.loaded && !account.signedIn && <Link to="/sign-in">Sign in</Link>}
             {account.configured && account.loaded && !account.signedIn && <Link to="/sign-up">Create account</Link>}
             {account.configured && account.loaded && account.signedIn && <ClerkUserControl />}
-            {adminSession.userName && <a href="/admin">Admin: {adminSession.userName}</a>}
-            {adminSession.userName && <button onClick={adminSession.logout}>Admin log out</button>}
           </nav>
         </PageContainer>
       </header>
@@ -101,7 +87,6 @@ export function SiteLayout({ children }: { children: ReactNode }) {
       <footer className="site-footer">
         <PageContainer>
           <p>Open Symbols is <a href="https://github.com/open-aac/opensymbols">open source</a> and powered by <a href="https://www.openaac.org">OpenAAC</a>.</p>
-          <a className="footer-admin" href="/login">OpenAAC administrator sign in</a>
         </PageContainer>
       </footer>
     </div>

@@ -14,7 +14,6 @@ import { SymbolCard } from './components'
 import { SiteLayout } from './components/layout'
 import {
   Button,
-  ButtonAnchor,
   ButtonLink,
   DescriptionList,
   EmptyState,
@@ -182,7 +181,6 @@ function SymbolPage() {
               <img src={symbol.data.image_url} alt={symbol.data.name} />
             </div>
             <DescriptionList items={[
-              { term: 'Actions', description: <ButtonAnchor href={`/admin/symbols/${repoKey}/${symbolKey}`}>Edit Symbol</ButtonAnchor> },
               { term: 'URL', description: symbol.data.source_url ? <a href={symbol.data.source_url}>{symbol.data.source_url}</a> : 'Source not available' },
               { term: 'Type', description: symbol.data.extension || 'unknown' },
               { term: 'Licence', description: symbol.data.license_url ? <a href={symbol.data.license_url}>{symbol.data.license}</a> : symbol.data.license },
