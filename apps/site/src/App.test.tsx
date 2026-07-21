@@ -193,14 +193,12 @@ describe('public discovery', () => {
     await waitFor(() => expect(screen.getByLabelText('Filter')).toHaveValue('skins'))
   })
 
-  it('renders symbol attribution and the legacy admin handoff', async () => {
+  it('renders symbol attribution without a public admin handoff', async () => {
     renderApp('/symbols/demo/hello-a1')
 
     expect(await screen.findByRole('heading', { name: 'Hello' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Edit Symbol' })).toHaveAttribute(
-      'href',
-      '/admin/symbols/demo/hello-a1',
-    )
+    expect(screen.queryByRole('link', { name: 'Edit Symbol' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Actions')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'CC BY 4.0' })).toBeInTheDocument()
     expect(screen.getByText('A person waving hello.')).toBeInTheDocument()
   })
