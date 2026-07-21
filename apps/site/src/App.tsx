@@ -278,9 +278,9 @@ function ApiDocumentationPage() {
     <PageSection className="api-documentation">
       <header className="api-introduction">
         <p className="eyebrow">Developer documentation</p>
-        <h1>OpenSymbols API Documentation</h1>
+        <h1>Open Symbols API Documentation</h1>
         <p>
-          OpenSymbols is an open-licensed repository of picture symbols. Applications can use the API to search
+          Open Symbols is an open-licensed repository of picture symbols. Applications can use the API to search
           across participating symbol libraries and add picture search to their own tools.
         </p>
         <p>
@@ -310,7 +310,7 @@ function ApiDocumentationPage() {
         <Surface className="api-runner-surface">
           <form className="api-runner" onSubmit={requestToken}>
             <h2>Generate an access token</h2>
-            <p>The value is sent only to this OpenSymbols server and is not stored by the site.</p>
+            <p>The value is sent only to this Open Symbols server and is not stored by the site.</p>
             <TextField
               id="api-shared-secret"
               label="Shared secret"
@@ -393,7 +393,7 @@ function ApiDocumentationPage() {
           <p><code>POST /api/v2/generate_secret</code></p>
           <p>
             Submit one application for each app or distinct purpose. Shared secrets may be disabled if their usage
-            affects other OpenSymbols users, so identify a monitored email address and describe the intended use.
+            affects other Open Symbols users, so identify a monitored email address and describe the intended use.
           </p>
           <p>
             By applying, you agree to use the service responsibly and avoid unnecessary repeated image requests.
@@ -428,7 +428,7 @@ function ApiDocumentationPage() {
           retry. Excessive request rates return <code>HTTP 429</code> with <code>throttled: true</code>.
         </p>
         <p>
-          OpenSymbols currently returns long-lived image URLs. Download images you need to retain rather than creating
+          Open Symbols currently returns long-lived image URLs. Download images you need to retain rather than creating
           unnecessary repeated traffic, and use <code>object-fit</code> and <code>object-position</code> when displaying
           images with unknown dimensions.
         </p>

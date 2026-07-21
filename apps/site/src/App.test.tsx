@@ -37,7 +37,7 @@ describe('public discovery', () => {
   it('renders the legacy API reference at its public route', () => {
     renderApp('/api')
 
-    expect(screen.getByRole('heading', { name: 'OpenSymbols API Documentation' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Open Symbols API Documentation' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /POST.*\/api\/v2\/token/ })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /GET.*\/api\/v2\/symbols/ })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Request a Shared Secret' })).toBeInTheDocument()

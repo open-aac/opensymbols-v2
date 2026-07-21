@@ -38,6 +38,9 @@ describe('site layout', () => {
     )
 
     expect(screen.getByRole('banner')).toHaveClass('site-header--sticky')
+    expect(screen.getByRole('link', { name: 'Open Symbols home' })).toHaveAttribute('href', '/')
+    expect(screen.getByRole('banner')).toHaveTextContent('Open Symbols')
+    expect(screen.getByRole('contentinfo')).toHaveTextContent('Open Symbols is open source')
     expect(screen.getByRole('link', { name: 'Skip to content' })).toHaveAttribute('href', '#main')
     expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1')
     expect(document.documentElement.style.getPropertyValue('--site-header-height')).toBe('84px')
