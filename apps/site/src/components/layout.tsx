@@ -80,13 +80,10 @@ export function SiteLayout({ children }: { children: ReactNode }) {
           <div className="identity-lockup">
             <Link className="identity" to="/" aria-label="Open Symbols home">
               <img src="/open-symbols-mark.svg" alt="" />
-              <span>
-                <strong>Open Symbols</strong>
-                <small>Open communication symbols for everyone</small>
-              </span>
+              <strong>Open Symbols</strong>
             </Link>
-            <a className="identity-endorsement" href="https://www.openaac.org">
-              <span>by OpenAAC</span>
+            <a className="identity-endorsement" href="https://www.openaac.org" aria-label="by OpenAAC">
+              <span aria-hidden="true">- by</span>
               <span className="identity-endorsement__badge">
                 {!openAacBadgeFailed && (
                   <img

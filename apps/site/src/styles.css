@@ -101,7 +101,6 @@ p { text-wrap: pretty; }
 }
 
 @media (max-width: 480px) {
-  .identity small { display: none; }
   .site-navigation { width: 100%; }
   .site-navigation a, .site-navigation button { padding-inline: 0.55rem; }
   .discovery-page { padding-top: var(--space-5); }

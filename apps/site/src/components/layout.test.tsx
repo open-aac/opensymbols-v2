@@ -65,6 +65,7 @@ describe('site layout', () => {
     const navigation = within(screen.getByRole('navigation', { name: 'Primary navigation' }))
 
     expect(endorsementLink).toHaveAttribute('href', 'https://www.openaac.org')
+    expect(endorsementLink).toHaveTextContent('- by')
     expect(endorsementLink.parentElement).toBe(homeLink.parentElement)
     expect(badge).toHaveAttribute('src', 'https://www.openaac.org/openaac.svg')
     expect(badge).toHaveAttribute('alt', '')
@@ -72,6 +73,7 @@ describe('site layout', () => {
     expect(navigation.queryByRole('link', { name: 'OpenAAC' })).not.toBeInTheDocument()
     expect(navigation.getByRole('link', { name: 'Search symbols' })).toHaveAttribute('href', '/search')
     expect(navigation.getByRole('link', { name: 'API documentation' })).toHaveAttribute('href', '/api')
+    expect(screen.queryByText('Open communication symbols for everyone')).not.toBeInTheDocument()
   })
 
   it('keeps the OpenAAC endorsement usable when its remote badge fails', () => {
