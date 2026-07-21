@@ -52,6 +52,7 @@ describe('account dashboard', () => {
     const view = renderAccount()
 
     expect(screen.getByRole('heading', { name: 'Demo Person' })).toBeVisible()
+    expect(screen.getByText('Your Open Symbols account')).toBeVisible()
     expect(screen.getByText('demo@example.com')).toBeVisible()
     expect(screen.getByText('DP')).toBeVisible()
     expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page')

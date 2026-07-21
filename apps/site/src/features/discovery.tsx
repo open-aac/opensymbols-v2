@@ -141,7 +141,7 @@ export function DiscoveryPage() {
     <PageContainer className="discovery-page">
       <section className="discovery-hero" aria-labelledby="discovery-heading">
         <div className="discovery-hero__copy">
-          <p className="eyebrow">OpenSymbols</p>
+          <p className="eyebrow">Open Symbols</p>
           <h1 id="discovery-heading">Find open communication symbols</h1>
           <p>Search open-licensed picture symbols for augmentative and alternative communication.</p>
         </div>
@@ -177,7 +177,7 @@ export function DiscoveryPage() {
         <div>
           <p className="eyebrow">Built for access</p>
           <h2 id="about-heading">Open symbols, fewer barriers</h2>
-          <p>OpenSymbols is part of the <a href="https://www.openaac.org">OpenAAC Initiative</a>, making it easier to create AAC resources without proprietary libraries.</p>
+          <p>Open Symbols is part of the <a href="https://www.openaac.org">OpenAAC Initiative</a>, making it easier to create AAC resources without proprietary libraries.</p>
         </div>
         <ButtonLink variant="secondary" to="/api">Read the API documentation</ButtonLink>
       </section>

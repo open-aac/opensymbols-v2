@@ -41,7 +41,7 @@ describe('Clerk user control', () => {
     expect(configuration).toHaveAttribute('data-show-name', 'false')
     expect(configuration).toHaveAttribute('data-min-width', '44px')
     expect(configuration).toHaveAttribute('data-min-height', '44px')
-    expect(screen.getByRole('link', { name: 'OpenSymbols account' })).toHaveAttribute('href', '/account')
+    expect(screen.getByRole('link', { name: 'Open Symbols account' })).toHaveAttribute('href', '/account')
     expect(screen.getByRole('button', { name: 'manageAccount' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'signOut' })).toBeInTheDocument()
     await expectNoAccessibilityViolations(view.container)

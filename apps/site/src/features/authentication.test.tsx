@@ -33,7 +33,7 @@ describe('account authentication', () => {
   it('keeps public pages usable when Clerk is not configured', () => {
     const view = render(<MemoryRouter><SignInPage /></MemoryRouter>)
     expect(screen.getByRole('heading', { name: 'Account access is not configured' })).toBeVisible()
-    expect(screen.getByText(/Public OpenSymbols search is still available/)).toBeVisible()
+    expect(screen.getByText(/Public Open Symbols search is still available/)).toBeVisible()
     return expectNoAccessibilityViolations(view.container)
   })
 

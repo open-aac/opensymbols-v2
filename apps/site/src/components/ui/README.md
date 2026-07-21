@@ -1,6 +1,6 @@
-# OpenSymbols UI components
+# Open Symbols UI components
 
-This directory contains the internal, application-level primitives shared by the OpenSymbols website. Import from `components/ui`; do not import individual files so the public path stays stable.
+This directory contains the internal, application-level primitives shared by the Open Symbols website. Import from `components/ui`; do not import individual files so the public path stays stable.
 
 ```tsx
 import { Button, FormActions, Surface, TextField } from '../components/ui'

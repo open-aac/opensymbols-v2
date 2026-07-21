@@ -76,10 +76,10 @@ export function SiteLayout({ children }: { children: ReactNode }) {
       <a className="skip-link" href="#main">Skip to content</a>
       <header className="site-header site-header--sticky" ref={headerRef}>
         <PageContainer className="site-header__inner">
-          <Link className="identity" to="/" aria-label="OpenSymbols home">
+          <Link className="identity" to="/" aria-label="Open Symbols home">
             <img src="/open-symbols-mark.svg" alt="" />
             <span>
-              <strong>OpenSymbols</strong>
+              <strong>Open Symbols</strong>
               <small>Open communication symbols for everyone</small>
             </span>
           </Link>
@@ -98,7 +98,7 @@ export function SiteLayout({ children }: { children: ReactNode }) {
       <main id="main" tabIndex={-1}>{children}</main>
       <footer className="site-footer">
         <PageContainer>
-          <p>OpenSymbols is <a href="https://github.com/open-aac/opensymbols">open source</a> and powered by <a href="https://www.openaac.org">OpenAAC</a>.</p>
+          <p>Open Symbols is <a href="https://github.com/open-aac/opensymbols">open source</a> and powered by <a href="https://www.openaac.org">OpenAAC</a>.</p>
           <a className="footer-admin" href="/login">OpenAAC administrator sign in</a>
         </PageContainer>
       </footer>

@@ -54,7 +54,7 @@ export function ClerkAuthBridge({ children }: { children: ReactNode }) {
   const { openUserProfile, signOut } = useClerk()
   const { user } = useUser()
   const email = user?.primaryEmailAddress?.emailAddress
-  const displayName = user?.fullName || user?.firstName || email || 'OpenSymbols user'
+  const displayName = user?.fullName || user?.firstName || email || 'Open Symbols user'
   const value = useMemo<AppAuthValue>(() => ({
     configured: true,
     loaded: auth.isLoaded,
@@ -100,7 +100,7 @@ function AuthenticationUnavailable() {
       <p className="eyebrow">Account access</p>
       <h1>Account access is not configured</h1>
       <p>
-        Public OpenSymbols search is still available. This environment needs a Clerk development key before
+        Public Open Symbols search is still available. This environment needs a Clerk development key before
         accounts can be created or used.
       </p>
     </PageSection>
@@ -132,7 +132,7 @@ export function SignInPage() {
 
   return (
     <PageSection className="auth-page">
-      <p className="eyebrow">Your OpenSymbols account</p>
+      <p className="eyebrow">Your Open Symbols account</p>
       <h1>Sign in</h1>
       <p>Sign in to access the account area and, in later phases, save personalized communication symbols.</p>
       <div className="auth-component">
@@ -159,7 +159,7 @@ export function SignUpPage() {
 
   return (
     <PageSection className="auth-page">
-      <p className="eyebrow">Your OpenSymbols account</p>
+      <p className="eyebrow">Your Open Symbols account</p>
       <h1>Create an account</h1>
       <p>Create an account with a verified email address. Public search and downloads do not require an account.</p>
       <div className="auth-component">

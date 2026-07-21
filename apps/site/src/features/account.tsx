@@ -86,8 +86,8 @@ export function AccountLayout() {
       <header className="account-profile">
         <ProfileAvatar />
         <div>
-          <p className="eyebrow">Your OpenSymbols account</p>
-          <h1>{auth.displayName || 'OpenSymbols user'}</h1>
+          <p className="eyebrow">Your Open Symbols account</p>
+          <h1>{auth.displayName || 'Open Symbols user'}</h1>
           {auth.email && <p className="account-profile__email">{auth.email}</p>}
         </div>
       </header>
@@ -181,7 +181,7 @@ export function AccountSettingsPage() {
         <div className="account-settings-card__identity">
           <ProfileAvatar />
           <div>
-            <h3>{auth.displayName || 'OpenSymbols user'}</h3>
+            <h3>{auth.displayName || 'Open Symbols user'}</h3>
             {auth.email && <p>{auth.email}</p>}
           </div>
         </div>

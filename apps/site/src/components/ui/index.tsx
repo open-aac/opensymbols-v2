@@ -280,7 +280,7 @@ export function PageState({ loading, error, onRetry, loadingLabel = 'Loading…'
     return (
       <StatusMessage status="alert">
         <h2>Loading failed</h2>
-        <p>The OpenSymbols service may be unavailable.</p>
+        <p>The Open Symbols service may be unavailable.</p>
         <Button onClick={onRetry}>Try again</Button>
       </StatusMessage>
     )

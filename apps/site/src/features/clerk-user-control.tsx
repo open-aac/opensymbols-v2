@@ -35,7 +35,7 @@ export function ClerkUserControl() {
     <div className="clerk-user-control">
       <UserButton appearance={userButtonAppearance} showName={false}>
         <UserButton.MenuItems>
-          <UserButton.Link href="/account" label="OpenSymbols account" labelIcon={<AccountIcon />} />
+          <UserButton.Link href="/account" label="Open Symbols account" labelIcon={<AccountIcon />} />
           <UserButton.Action label="manageAccount" />
           <UserButton.Action label="signOut" />
         </UserButton.MenuItems>
