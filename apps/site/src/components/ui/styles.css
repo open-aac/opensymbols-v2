@@ -22,6 +22,22 @@
 .action--quiet { color: var(--color-action); background: transparent; border-color: transparent; text-decoration: underline; }
 .action:disabled { color: var(--color-text-muted); background: var(--color-surface-muted); border-color: var(--color-border); cursor: not-allowed; opacity: 0.72; }
 .card-link { color: var(--color-text); text-decoration: none; }
+.brand-endorsement {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.25rem 0.4rem;
+  color: var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.brand-endorsement:hover { color: var(--color-action-hover); background: var(--color-accent-soft); }
+.brand-endorsement__icon { display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; }
+.brand-endorsement__icon img { width: 100%; height: 100%; object-fit: contain; }
 
 .field { display: grid; gap: var(--space-1); }
 .field__label { font-weight: 750; }
@@ -72,6 +88,7 @@ textarea.field__control { min-height: 7rem; resize: vertical; }
 .description-list dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 
 @media (max-width: 480px) {
+  .brand-endorsement__icon { width: 32px; height: 32px; }
   .page-container, .page-section { width: min(100% - 1.25rem, var(--page-width)); }
   .section-heading { align-items: flex-start; flex-direction: column; }
   .form-actions { align-items: stretch; flex-direction: column; }

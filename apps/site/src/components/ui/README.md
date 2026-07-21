@@ -17,6 +17,7 @@ import { Button, FormActions, Surface, TextField } from '../components/ui'
 ## Semantics
 
 - Use `Button` for an action, `ButtonLink` for client-side navigation, and `ButtonAnchor` for external or full-document navigation. Do not exchange their semantics for styling convenience.
+- `BrandEndorsement` is a standalone link whose accessible name is computed as “by [brand name]”. Its visible “by” and icon are decorative; if the remote icon fails, the reserved icon box and working link remain. Never nest it inside another link, button, or interactive element.
 - Every field requires a stable `id` and visible `label`. Hints and errors are connected through `aria-describedby`; loading disables the control and announces its state.
 - Use `StatusMessage status="status"` for progress or confirmation and `status="alert"` for failures that need immediate announcement.
 - `Avatar` is decorative because the adjacent profile name supplies identity. Its fallback is derived deterministically from the name.

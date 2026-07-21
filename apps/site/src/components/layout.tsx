@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { checkSession } from '../api'
 import { useAppAuth } from '../features/authentication'
 import { ClerkUserControl } from '../features/clerk-user-control'
-import { PageContainer } from './ui'
+import { BrandEndorsement, PageContainer } from './ui'
 import './layout.css'
 
 function useSession() {
@@ -70,7 +70,6 @@ export function SiteLayout({ children }: { children: ReactNode }) {
   const adminSession = useSession()
   const account = useAppAuth()
   const headerRef = useStickyHeaderOffset()
-  const [openAacBadgeFailed, setOpenAacBadgeFailed] = useState(false)
 
   return (
     <div className="site-shell">
@@ -82,20 +81,11 @@ export function SiteLayout({ children }: { children: ReactNode }) {
               <img src="/open-symbols-mark.svg" alt="" />
               <strong>Open Symbols</strong>
             </Link>
-            <a className="identity-endorsement" href="https://www.openaac.org" aria-label="by OpenAAC">
-              <span aria-hidden="true">by</span>
-              <span className="identity-endorsement__badge">
-                {!openAacBadgeFailed && (
-                  <img
-                    src="https://www.openaac.org/openaac.svg"
-                    alt=""
-                    decoding="async"
-                    referrerPolicy="no-referrer"
-                    onError={() => setOpenAacBadgeFailed(true)}
-                  />
-                )}
-              </span>
-            </a>
+            <BrandEndorsement
+              href="https://www.openaac.org"
+              brandName="OpenAAC"
+              iconSrc="https://www.openaac.org/openaac.svg"
+            />
           </div>
           <nav className="site-navigation" aria-label="Primary navigation">
             <Link to="/search">Search symbols</Link>

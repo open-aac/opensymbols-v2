@@ -7,6 +7,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from 'react'
+import { useState } from 'react'
 import { Link, type LinkProps } from 'react-router-dom'
 import './styles.css'
 
@@ -46,6 +47,39 @@ export interface ButtonAnchorProps extends AnchorHTMLAttributes<HTMLAnchorElemen
 /** External or full-document link styled as an action. */
 export function ButtonAnchor({ variant = 'secondary', className, children, ...props }: ButtonAnchorProps) {
   return <a className={actionClass(variant, className)} {...props}>{children}</a>
+}
+
+export interface BrandEndorsementProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'aria-label' | 'children'> {
+  href: string
+  brandName: string
+  iconSrc: string
+}
+
+/** Compact brand credit with a computed accessible name and decorative remote icon. */
+export function BrandEndorsement({ href, brandName, iconSrc, className, ...props }: BrandEndorsementProps) {
+  const [iconFailed, setIconFailed] = useState(false)
+
+  return (
+    <a
+      {...props}
+      className={classes('brand-endorsement', className)}
+      href={href}
+      aria-label={`by ${brandName}`}
+    >
+      <span aria-hidden="true">by</span>
+      <span className="brand-endorsement__icon">
+        {!iconFailed && (
+          <img
+            src={iconSrc}
+            alt=""
+            decoding="async"
+            referrerPolicy="no-referrer"
+            onError={() => setIconFailed(true)}
+          />
+        )}
+      </span>
+    </a>
+  )
 }
 
 export type CardLinkProps = LinkProps
