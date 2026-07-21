@@ -10,8 +10,22 @@ import {
   searchSymbols,
 } from './api'
 import type { InteractiveApiResult } from './api'
-import { PageState, SymbolCard } from './components'
+import { SymbolCard } from './components'
 import { SiteLayout } from './components/layout'
+import {
+  Button,
+  ButtonAnchor,
+  ButtonLink,
+  DescriptionList,
+  EmptyState,
+  FormActions,
+  PageSection,
+  PageState,
+  SelectField,
+  Surface,
+  TextAreaField,
+  TextField,
+} from './components/ui'
 import { DiscoveryPage } from './features/discovery'
 import {
   RequireAuthentication,
@@ -80,7 +94,7 @@ function RepositoryPage() {
   }, [load])
 
   return (
-    <section className="content-page">
+    <PageSection>
       <PageState loading={repository.loading} error={repository.error} onRetry={repository.retry}>
         {repository.data && (
           <div className="repository-summary">
@@ -91,18 +105,16 @@ function RepositoryPage() {
             />
             <div>
               <h1>{repository.data.name}</h1>
-              <dl>
-                <dt>Website</dt>
-                <dd>{repository.data.url ? <a href={repository.data.url}>{repository.data.url}</a> : 'Not supplied'}</dd>
-                <dt>Default Licence</dt>
-                <dd>
-                  {repository.data.attribution.license || 'mixed licences'}{' '}
-                  {repository.data.attribution.license_url && <a href={repository.data.attribution.license_url}>more info</a>}
-                </dd>
-                <dt>Primary Author</dt><dd>{repository.data.attribution.author_name || 'unknown'}</dd>
-                <dt>Symbols Shared</dt><dd>{repository.data.symbol_count.toLocaleString()}</dd>
-                <dt>Description</dt><dd>{repository.data.description || 'No description supplied.'}</dd>
-              </dl>
+              <DescriptionList items={[
+                { term: 'Website', description: repository.data.url ? <a href={repository.data.url}>{repository.data.url}</a> : 'Not supplied' },
+                {
+                  term: 'Default Licence',
+                  description: <>{repository.data.attribution.license || 'mixed licences'}{' '}{repository.data.attribution.license_url && <a href={repository.data.attribution.license_url}>more info</a>}</>,
+                },
+                { term: 'Primary Author', description: repository.data.attribution.author_name || 'unknown' },
+                { term: 'Symbols Shared', description: repository.data.symbol_count.toLocaleString() },
+                { term: 'Description', description: repository.data.description || 'No description supplied.' },
+              ]} />
             </div>
           </div>
         )}
@@ -114,30 +126,23 @@ function RepositoryPage() {
           setActiveSearch(search.trim())
         }}
       >
-        <label>
-          Skin Tone
-          <select value={skin} onChange={(event) => setSkin(event.target.value)}>
+        <SelectField id="repository-skin" label="Skin Tone" value={skin} onChange={(event) => setSkin(event.target.value)}>
             <option value="default">Default</option>
             <option value="light">Light</option>
             <option value="medium-light">Medium-Light</option>
             <option value="medium">Medium</option>
             <option value="medium-dark">Medium-Dark</option>
             <option value="dark">Dark</option>
-          </select>
-        </label>
-        <label>
-          Filter
-          <select value={filter} onChange={(event) => setFilter(event.target.value as RepositoryFilter)}>
+        </SelectField>
+        <SelectField id="repository-filter" label="Filter" value={filter} onChange={(event) => setFilter(event.target.value as RepositoryFilter)}>
             <option value="none">No Filter</option>
             <option value="unsafe">Unsafe Results</option>
             <option value="skins">Skinned Results</option>
-          </select>
-        </label>
-        <label>Search<input value={search} onChange={(event) => setSearch(event.target.value)} /></label>
-        <div>
-          <button className="button">Go</button>
-          <button
-            className="button"
+        </SelectField>
+        <TextField id="repository-search" label="Search" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <FormActions>
+          <Button type="submit">Go</Button>
+          <Button
             type="button"
             onClick={() => {
               setSearch('')
@@ -145,21 +150,21 @@ function RepositoryPage() {
             }}
           >
             Show All
-          </button>
-        </div>
+          </Button>
+        </FormActions>
       </form>
       <PageState loading={loading} error={error} onRetry={() => void load(true, 0)}>
         <div className="symbol-grid">
           {symbols.map((symbol) => <SymbolCard key={symbol.id} symbol={applySkin(symbol)} />)}
         </div>
-        {!loading && symbols.length === 0 && <p className="state-message">No results found.</p>}
+        {!loading && symbols.length === 0 && <EmptyState heading="No results found" description="Try changing the search or filters." />}
       </PageState>
       {!activeSearch && hasMore && (
-        <button className="button button--primary more" onClick={() => void load(false, nextPage)}>
+        <Button className="more" variant="primary" onClick={() => void load(false, nextPage)}>
           More Symbols
-        </button>
+        </Button>
       )}
-    </section>
+    </PageSection>
   )
 }
 
@@ -168,7 +173,7 @@ function SymbolPage() {
   const symbol = useAsync(() => getSymbol(repoKey, symbolKey), [repoKey, symbolKey])
 
   return (
-    <section className="content-page">
+    <PageSection>
       <PageState loading={symbol.loading} error={symbol.error} onRetry={symbol.retry}>
         {symbol.data && (
           <div className="symbol-detail">
@@ -176,23 +181,19 @@ function SymbolPage() {
               <h1>{symbol.data.name}</h1>
               <img src={symbol.data.image_url} alt={symbol.data.name} />
             </div>
-            <dl>
-              <dt>Actions</dt>
-              <dd><a className="button" href={`/admin/symbols/${repoKey}/${symbolKey}`}>Edit Symbol</a></dd>
-              <dt>URL</dt>
-              <dd>{symbol.data.source_url ? <a href={symbol.data.source_url}>{symbol.data.source_url}</a> : 'Source not available'}</dd>
-              <dt>Type</dt><dd>{symbol.data.extension || 'unknown'}</dd>
-              <dt>Licence</dt>
-              <dd>{symbol.data.license_url ? <a href={symbol.data.license_url}>{symbol.data.license}</a> : symbol.data.license}</dd>
-              <dt>Author</dt>
-              <dd>{symbol.data.author_url ? <a href={symbol.data.author_url}>{symbol.data.author}</a> : symbol.data.author || 'unknown'}</dd>
-              <dt>Repository</dt><dd><Link to={`/repositories/${repoKey}`}>{repoKey}</Link></dd>
-              {symbol.data.description && <><dt>Description</dt><dd>{symbol.data.description}</dd></>}
-            </dl>
+            <DescriptionList items={[
+              { term: 'Actions', description: <ButtonAnchor href={`/admin/symbols/${repoKey}/${symbolKey}`}>Edit Symbol</ButtonAnchor> },
+              { term: 'URL', description: symbol.data.source_url ? <a href={symbol.data.source_url}>{symbol.data.source_url}</a> : 'Source not available' },
+              { term: 'Type', description: symbol.data.extension || 'unknown' },
+              { term: 'Licence', description: symbol.data.license_url ? <a href={symbol.data.license_url}>{symbol.data.license}</a> : symbol.data.license },
+              { term: 'Author', description: symbol.data.author_url ? <a href={symbol.data.author_url}>{symbol.data.author}</a> : symbol.data.author || 'unknown' },
+              { term: 'Repository', description: <Link to={`/repositories/${repoKey}`}>{repoKey}</Link> },
+              ...(symbol.data.description ? [{ term: 'Description', description: symbol.data.description }] : []),
+            ]} />
           </div>
         )}
       </PageState>
-    </section>
+    </PageSection>
   )
 }
 
@@ -200,10 +201,10 @@ function ApiResult({ result }: { result?: InteractiveApiResult }) {
   if (!result) return null
 
   return (
-    <div className={`api-result${result.ok ? '' : ' api-result--error'}`}>
+    <Surface className="api-result" tone={result.ok ? 'muted' : 'danger'}>
       <h3>Results</h3>
       <pre aria-live="polite">{result.output}</pre>
-    </div>
+    </Surface>
   )
 }
 
@@ -274,7 +275,7 @@ function ApiDocumentationPage() {
   }
 
   return (
-    <article className="content-page api-documentation">
+    <PageSection className="api-documentation">
       <header className="api-introduction">
         <p className="eyebrow">Developer documentation</p>
         <h1>OpenSymbols API Documentation</h1>
@@ -296,10 +297,9 @@ function ApiDocumentationPage() {
           <h2>POST <code>/api/v2/token</code></h2>
           <p>Generate a short-lived access token from the shared secret provided to your application.</p>
           <h3>Form parameters</h3>
-          <dl>
-            <dt><code>secret</code></dt>
-            <dd>Required shared secret. It must remain private.</dd>
-          </dl>
+          <DescriptionList items={[
+            { term: <code>secret</code>, description: 'Required shared secret. It must remain private.' },
+          ]} />
           <h3>Successful response</h3>
           <pre>{`HTTP 200
 {
@@ -307,24 +307,25 @@ function ApiDocumentationPage() {
   "expires": "2026-07-18T12:00:00Z"
 }`}</pre>
         </div>
-        <form className="api-runner" onSubmit={requestToken}>
-          <h2>Generate an access token</h2>
-          <p>The value is sent only to this OpenSymbols server and is not stored by the site.</p>
-          <label>
-            Shared secret
-            <input
+        <Surface className="api-runner-surface">
+          <form className="api-runner" onSubmit={requestToken}>
+            <h2>Generate an access token</h2>
+            <p>The value is sent only to this OpenSymbols server and is not stored by the site.</p>
+            <TextField
+              id="api-shared-secret"
+              label="Shared secret"
               required
               type="password"
               autoComplete="off"
               value={secret}
               onChange={(event) => setSecret(event.target.value)}
             />
-          </label>
-          <button className="button button--primary" disabled={tokenLoading}>
-            {tokenLoading ? 'Sending…' : 'Submit'}
-          </button>
-          <ApiResult result={tokenResult} />
-        </form>
+            <Button variant="primary" type="submit" disabled={tokenLoading}>
+              {tokenLoading ? 'Sending…' : 'Submit'}
+            </Button>
+            <ApiResult result={tokenResult} />
+          </form>
+        </Surface>
       </section>
 
       <section className="api-call">
@@ -332,17 +333,14 @@ function ApiDocumentationPage() {
           <h2>GET <code>/api/v2/symbols</code></h2>
           <p>Search for public symbols. Send the access token in the <code>Authorization</code> header.</p>
           <h3>Query parameters</h3>
-          <dl>
-            <dt><code>q</code></dt>
-            <dd>
-              Required search terms. Add <code>repo:repo-key</code> to limit results, <code>favor:repo-key</code> to
-              favour a library, or <code>hc:1</code> to favour high-contrast results.
-            </dd>
-            <dt><code>locale</code></dt>
-            <dd>Two-letter lowercase locale such as <code>en</code> or <code>es</code>. Defaults to <code>en</code>.</dd>
-            <dt><code>safe</code></dt>
-            <dd>Safe search is enabled by default. Send <code>0</code> to include unsafe results.</dd>
-          </dl>
+          <DescriptionList items={[
+            {
+              term: <code>q</code>,
+              description: <>Required search terms. Add <code>repo:repo-key</code> to limit results, <code>favor:repo-key</code> to favour a library, or <code>hc:1</code> to favour high-contrast results.</>,
+            },
+            { term: <code>locale</code>, description: <>Two-letter lowercase locale such as <code>en</code> or <code>es</code>. Defaults to <code>en</code>.</> },
+            { term: <code>safe</code>, description: <>Safe search is enabled by default. Send <code>0</code> to include unsafe results.</> },
+          ]} />
           <h3>Successful response</h3>
           <pre>{`HTTP 200
 [
@@ -371,32 +369,22 @@ function ApiDocumentationPage() {
             returned, so HTML clients should use <code>object-fit</code> and <code>object-position</code> to centre images.
           </p>
         </div>
-        <form className="api-runner" onSubmit={runSearch}>
-          <h2>Try symbol search</h2>
-          <label>
-            Access token
-            <input required value={accessToken} onChange={(event) => setAccessToken(event.target.value)} />
-          </label>
-          <label>
-            Search terms
-            <input required value={query} onChange={(event) => setQuery(event.target.value)} />
-          </label>
-          <label>
-            Locale
-            <input required maxLength={2} value={locale} onChange={(event) => setLocale(event.target.value)} />
-          </label>
-          <label>
-            Safe search
-            <select value={safe ? '1' : '0'} onChange={(event) => setSafe(event.target.value === '1')}>
-              <option value="1">Enabled</option>
-              <option value="0">Disabled</option>
-            </select>
-          </label>
-          <button className="button button--primary" disabled={searchLoading}>
-            {searchLoading ? 'Searching…' : 'Submit'}
-          </button>
-          <ApiResult result={searchResult} />
-        </form>
+        <Surface className="api-runner-surface">
+          <form className="api-runner" onSubmit={runSearch}>
+            <h2>Try symbol search</h2>
+            <TextField id="api-access-token" label="Access token" required value={accessToken} onChange={(event) => setAccessToken(event.target.value)} />
+            <TextField id="api-search-query" label="Search terms" required value={query} onChange={(event) => setQuery(event.target.value)} />
+            <TextField id="api-search-locale" label="Locale" required maxLength={2} value={locale} onChange={(event) => setLocale(event.target.value)} />
+            <SelectField id="api-safe-search" label="Safe search" value={safe ? '1' : '0'} onChange={(event) => setSafe(event.target.value === '1')}>
+                <option value="1">Enabled</option>
+                <option value="0">Disabled</option>
+            </SelectField>
+            <Button variant="primary" type="submit" disabled={searchLoading}>
+              {searchLoading ? 'Searching…' : 'Submit'}
+            </Button>
+            <ApiResult result={searchResult} />
+          </form>
+        </Surface>
       </section>
 
       <section className="api-secret-request" id="shared-secret">
@@ -411,31 +399,26 @@ function ApiDocumentationPage() {
             By applying, you agree to use the service responsibly and avoid unnecessary repeated image requests.
           </p>
         </div>
-        <form className="api-runner" onSubmit={applyForSharedSecret}>
-          <h2>Shared secret application</h2>
-          <label>
-            Organization
-            <input required value={organization} onChange={(event) => setOrganization(event.target.value)} />
-          </label>
-          <label>
-            Email
-            <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
-          </label>
-          <label>
-            Purpose
-            <textarea
+        <Surface className="api-runner-surface">
+          <form className="api-runner" onSubmit={applyForSharedSecret}>
+            <h2>Shared secret application</h2>
+            <TextField id="api-organization" label="Organization" required value={organization} onChange={(event) => setOrganization(event.target.value)} />
+            <TextField id="api-email" label="Email" required type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+            <TextAreaField
+              id="api-purpose"
+              label="Purpose"
               required
               rows={4}
               placeholder="Description of your intended use"
               value={purpose}
               onChange={(event) => setPurpose(event.target.value)}
             />
-          </label>
-          <button className="button button--primary" disabled={sharedSecretLoading}>
-            {sharedSecretLoading ? 'Sending…' : 'Submit application'}
-          </button>
-          <ApiResult result={sharedSecretResult} />
-        </form>
+            <Button variant="primary" type="submit" disabled={sharedSecretLoading}>
+              {sharedSecretLoading ? 'Sending…' : 'Submit application'}
+            </Button>
+            <ApiResult result={sharedSecretResult} />
+          </form>
+        </Surface>
       </section>
 
       <section className="api-notes">
@@ -450,18 +433,18 @@ function ApiDocumentationPage() {
           images with unknown dimensions.
         </p>
       </section>
-    </article>
+    </PageSection>
   )
 }
 
 function NotFoundPage() {
   return (
-    <section className="content-page not-found">
+    <PageSection className="not-found">
       <p className="eyebrow">404</p>
       <h1>Page not found</h1>
       <p>This part of Open Symbols has not been rebuilt here yet.</p>
-      <p><Link to="/">Return to Open Symbols</Link></p>
-    </section>
+      <ButtonLink to="/">Return to Open Symbols</ButtonLink>
+    </PageSection>
   )
 }
 

@@ -75,21 +75,11 @@ p { text-wrap: pretty; }
   border: 0;
 }
 
-.page-container { width: min(100% - 2rem, var(--page-width)); margin-inline: auto; }
 .site-shell { min-height: 100vh; display: flex; flex-direction: column; }
 .site-shell main { flex: 1; min-height: 38rem; }
-/* Existing detail and documentation routes retain their layouts for later dedicated migrations. */
-.content-page { width: min(100% - 2rem, var(--page-width)); margin-inline: auto; padding: var(--space-7) 0; }
-.content-page h1 { font-size: var(--text-xl); }
 .repository-summary { display: grid; grid-template-columns: 270px 1fr; gap: var(--space-6); margin-bottom: var(--space-6); }
 .repository-summary > img { width: 100%; max-height: 260px; padding: var(--space-3); border: 1px solid var(--color-border); object-fit: contain; }
-dl { display: grid; grid-template-columns: 140px 1fr; gap: var(--space-2) var(--space-4); }
-dt { font-weight: 700; text-align: right; }
-dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .repository-controls { display: flex; align-items: end; flex-wrap: wrap; gap: var(--space-3); margin: var(--space-5) 0; padding: var(--space-4); border-block: 1px solid var(--color-border); }
-.repository-controls label { display: grid; gap: var(--space-1); }
-.button { display: inline-flex; min-height: 44px; align-items: center; padding: 0.65rem 1rem; color: var(--color-text); background: var(--color-surface); border: 2px solid var(--color-border); border-radius: var(--radius-sm); font-weight: 700; text-decoration: none; cursor: pointer; }
-.button--primary { color: white; background: var(--color-action); border-color: var(--color-action); }
 .more { display: flex; margin: var(--space-6) auto; }
 .symbol-detail { display: grid; grid-template-columns: minmax(300px, 430px) 1fr; gap: var(--space-6); }
 .symbol-detail img { width: 100%; max-height: 430px; padding: var(--space-3); border: 1px solid var(--color-border); object-fit: contain; }
@@ -98,9 +88,8 @@ dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .api-introduction { margin: 0 auto var(--space-6); }
 .api-call, .api-secret-request { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 0.85fr); gap: var(--space-6); margin: var(--space-6) 0; padding-top: var(--space-6); border-top: 1px solid var(--color-border); }
 .api-reference pre, .api-result pre { max-width: 100%; padding: var(--space-4); overflow: auto; background: var(--color-surface-muted); border: 1px solid var(--color-border); border-radius: var(--radius-sm); white-space: pre-wrap; overflow-wrap: anywhere; }
-.api-runner { align-self: start; padding: var(--space-5); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
-.api-runner label { display: grid; gap: var(--space-1); margin: var(--space-3) 0; font-weight: 700; }
-.api-result--error pre { color: var(--color-error); background: var(--color-error-soft); }
+.api-runner-surface { align-self: start; }
+.api-runner .field { margin: var(--space-3) 0; }
 .not-found { max-width: 38rem; margin: auto; padding-block: var(--space-8); text-align: center; }
 
 @media (max-width: 800px) {
@@ -109,11 +98,9 @@ dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
   .discovery-hero, .repository-summary, .symbol-detail, .api-call, .api-secret-request { grid-template-columns: 1fr; }
   .discovery-hero { padding: var(--space-6); }
   .discovery-about { align-items: flex-start; flex-direction: column; }
-  dl { grid-template-columns: 110px 1fr; }
 }
 
 @media (max-width: 480px) {
-  .page-container, .content-page { width: min(100% - 1.25rem, var(--page-width)); }
   .identity small { display: none; }
   .site-navigation { width: 100%; }
   .site-navigation a, .site-navigation button { padding-inline: 0.55rem; }
@@ -121,8 +108,6 @@ dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
   .discovery-hero, .discovery-about, .request-symbol { padding: var(--space-5); }
   .section-heading { align-items: flex-start; flex-direction: column; }
   .site-footer .page-container { align-items: flex-start; flex-direction: column; }
-  dl { display: block; }
-  dt { margin-top: var(--space-3); text-align: left; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
+import { PageSection, StatusMessage } from '../components/ui'
 import './authentication.css'
 
 export interface AppAuthValue {
@@ -95,14 +96,14 @@ function returnToFromLocation(search: string) {
 
 function AuthenticationUnavailable() {
   return (
-    <section className="content-page auth-page">
+    <PageSection className="auth-page">
       <p className="eyebrow">Account access</p>
       <h1>Account access is not configured</h1>
       <p>
         Public OpenSymbols search is still available. This environment needs a Clerk development key before
         accounts can be created or used.
       </p>
-    </section>
+    </PageSection>
   )
 }
 
@@ -130,7 +131,7 @@ export function SignInPage() {
   if (auth.loaded && auth.signedIn) return <Navigate replace to={returnTo} />
 
   return (
-    <section className="content-page auth-page">
+    <PageSection className="auth-page">
       <p className="eyebrow">Your OpenSymbols account</p>
       <h1>Sign in</h1>
       <p>Sign in to access the account area and, in later phases, save personalized communication symbols.</p>
@@ -144,7 +145,7 @@ export function SignInPage() {
           signUpUrl={`/sign-up?redirect_url=${encodeURIComponent(returnTo)}`}
         />
       </div>
-    </section>
+    </PageSection>
   )
 }
 
@@ -157,7 +158,7 @@ export function SignUpPage() {
   if (auth.loaded && auth.signedIn) return <Navigate replace to={returnTo} />
 
   return (
-    <section className="content-page auth-page">
+    <PageSection className="auth-page">
       <p className="eyebrow">Your OpenSymbols account</p>
       <h1>Create an account</h1>
       <p>Create an account with a verified email address. Public search and downloads do not require an account.</p>
@@ -171,7 +172,7 @@ export function SignUpPage() {
           signInUrl={`/sign-in?redirect_url=${encodeURIComponent(returnTo)}`}
         />
       </div>
-    </section>
+    </PageSection>
   )
 }
 
@@ -181,7 +182,7 @@ export function RequireAuthentication({ children }: { children: ReactNode }) {
 
   if (!auth.configured) return <AuthenticationUnavailable />
   if (!auth.loaded) {
-    return <p className="content-page state-message" role="status">Checking your account…</p>
+    return <PageSection><StatusMessage status="status">Checking your account…</StatusMessage></PageSection>
   }
   if (!auth.signedIn) {
     const returnTo = `${location.pathname}${location.search}${location.hash}`

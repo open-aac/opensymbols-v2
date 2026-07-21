@@ -1,34 +1,6 @@
-import type { ReactNode } from 'react'
 import type { Repository, SymbolResult } from './types'
-import { Button, CardLink } from './components/ui'
-
-export function PageState({
-  loading,
-  error,
-  onRetry,
-  loadingLabel = 'Loading…',
-  children,
-}: {
-  loading: boolean
-  error?: Error
-  onRetry: () => void
-  loadingLabel?: string
-  children: ReactNode
-}) {
-  if (loading) return <p className="state-message" role="status">{loadingLabel}</p>
-
-  if (error) {
-    return (
-      <div className="state-message state-message--error" role="alert">
-        <h2>Loading failed</h2>
-        <p>The OpenSymbols service may be unavailable.</p>
-        <Button onClick={onRetry}>Try again</Button>
-      </div>
-    )
-  }
-
-  return children
-}
+import { CardLink } from './components/ui'
+export { PageState } from './components/ui'
 
 export function SymbolCard({ symbol, compact = false }: { symbol: SymbolResult; compact?: boolean }) {
   return (
