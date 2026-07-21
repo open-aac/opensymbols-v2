@@ -14,11 +14,16 @@ import { PageState, SymbolCard } from './components'
 import { SiteLayout } from './components/layout'
 import { DiscoveryPage } from './features/discovery'
 import {
-  AccountPage,
   RequireAuthentication,
   SignInPage,
   SignUpPage,
 } from './features/authentication'
+import {
+  AccountAreaPage,
+  AccountLayout,
+  AccountOverviewPage,
+  AccountSettingsPage,
+} from './features/account'
 import { useAsync } from './hooks'
 import type { SymbolResult } from './types'
 
@@ -471,10 +476,13 @@ export function App() {
         <Route path="/symbols/:repoKey/:symbolKey" element={<SymbolPage />} />
         <Route path="/sign-in/*" element={<SignInPage />} />
         <Route path="/sign-up/*" element={<SignUpPage />} />
-        <Route
-          path="/account"
-          element={<RequireAuthentication><AccountPage /></RequireAuthentication>}
-        />
+        <Route path="/account" element={<RequireAuthentication><AccountLayout /></RequireAuthentication>}>
+          <Route index element={<AccountOverviewPage />} />
+          <Route path="characters" element={<AccountAreaPage area="characters" />} />
+          <Route path="symbols" element={<AccountAreaPage area="symbols" />} />
+          <Route path="packs" element={<AccountAreaPage area="packs" />} />
+          <Route path="settings" element={<AccountSettingsPage />} />
+        </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </SiteLayout>
