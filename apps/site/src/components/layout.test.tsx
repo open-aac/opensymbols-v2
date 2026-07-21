@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { expectNoAccessibilityViolations } from '../test/axe'
@@ -54,6 +54,37 @@ describe('site layout', () => {
 
     view.unmount()
     expect(document.documentElement.style.getPropertyValue('--site-header-height')).toBe('')
+  })
+
+  it('presents OpenAAC as a linked endorsement outside primary navigation', () => {
+    render(<MemoryRouter><SiteLayout><p>Content</p></SiteLayout></MemoryRouter>)
+
+    const homeLink = screen.getByRole('link', { name: 'Open Symbols home' })
+    const endorsementLink = screen.getByRole('link', { name: 'by OpenAAC' })
+    const badge = endorsementLink.querySelector('img')
+    const navigation = within(screen.getByRole('navigation', { name: 'Primary navigation' }))
+
+    expect(endorsementLink).toHaveAttribute('href', 'https://www.openaac.org')
+    expect(endorsementLink.parentElement).toBe(homeLink.parentElement)
+    expect(badge).toHaveAttribute('src', 'https://www.openaac.org/openaac.svg')
+    expect(badge).toHaveAttribute('alt', '')
+    expect(badge).toHaveAttribute('referrerpolicy', 'no-referrer')
+    expect(navigation.queryByRole('link', { name: 'OpenAAC' })).not.toBeInTheDocument()
+    expect(navigation.getByRole('link', { name: 'Search symbols' })).toHaveAttribute('href', '/search')
+    expect(navigation.getByRole('link', { name: 'API documentation' })).toHaveAttribute('href', '/api')
+  })
+
+  it('keeps the OpenAAC endorsement usable when its remote badge fails', () => {
+    render(<MemoryRouter><SiteLayout><p>Content</p></SiteLayout></MemoryRouter>)
+
+    const endorsementLink = screen.getByRole('link', { name: 'by OpenAAC' })
+    const badge = endorsementLink.querySelector('img')
+    expect(badge).not.toBeNull()
+
+    fireEvent.error(badge!)
+
+    expect(endorsementLink.querySelector('img')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'by OpenAAC' })).toHaveAttribute('href', 'https://www.openaac.org')
   })
 
   it('shows account actions separately from the legacy administrator login', () => {

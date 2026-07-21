@@ -70,23 +70,39 @@ export function SiteLayout({ children }: { children: ReactNode }) {
   const adminSession = useSession()
   const account = useAppAuth()
   const headerRef = useStickyHeaderOffset()
+  const [openAacBadgeFailed, setOpenAacBadgeFailed] = useState(false)
 
   return (
     <div className="site-shell">
       <a className="skip-link" href="#main">Skip to content</a>
       <header className="site-header site-header--sticky" ref={headerRef}>
         <PageContainer className="site-header__inner">
-          <Link className="identity" to="/" aria-label="Open Symbols home">
-            <img src="/open-symbols-mark.svg" alt="" />
-            <span>
-              <strong>Open Symbols</strong>
-              <small>Open communication symbols for everyone</small>
-            </span>
-          </Link>
+          <div className="identity-lockup">
+            <Link className="identity" to="/" aria-label="Open Symbols home">
+              <img src="/open-symbols-mark.svg" alt="" />
+              <span>
+                <strong>Open Symbols</strong>
+                <small>Open communication symbols for everyone</small>
+              </span>
+            </Link>
+            <a className="identity-endorsement" href="https://www.openaac.org">
+              <span>by OpenAAC</span>
+              <span className="identity-endorsement__badge">
+                {!openAacBadgeFailed && (
+                  <img
+                    src="https://www.openaac.org/openaac.svg"
+                    alt=""
+                    decoding="async"
+                    referrerPolicy="no-referrer"
+                    onError={() => setOpenAacBadgeFailed(true)}
+                  />
+                )}
+              </span>
+            </a>
+          </div>
           <nav className="site-navigation" aria-label="Primary navigation">
             <Link to="/search">Search symbols</Link>
             <Link to="/api">API documentation</Link>
-            <a href="https://www.openaac.org">OpenAAC</a>
             {account.configured && account.loaded && !account.signedIn && <Link to="/sign-in">Sign in</Link>}
             {account.configured && account.loaded && !account.signedIn && <Link to="/sign-up">Create account</Link>}
             {account.configured && account.loaded && account.signedIn && <ClerkUserControl />}
