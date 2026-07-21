@@ -1,10 +1,8 @@
-import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { describe, expect, it } from 'vitest'
 import { expectNoAccessibilityViolations } from '../test/axe'
 import {
-  AccountPage,
   AppAuthProvider,
   RequireAuthentication,
   SignInPage,
@@ -18,6 +16,7 @@ function authValue(overrides: Partial<AppAuthValue> = {}): AppAuthValue {
     loaded: true,
     signedIn: false,
     getToken: async () => null,
+    manageAccount: () => undefined,
     signOut: async () => undefined,
     ...overrides,
   }
@@ -38,43 +37,24 @@ describe('account authentication', () => {
     return expectNoAccessibilityViolations(view.container)
   })
 
-  it('redirects a signed-out visitor to sign in with a safe return path', async () => {
+  it('redirects a signed-out visitor to sign in with the nested account return path', async () => {
+    function SignInDestination() {
+      const location = useLocation()
+      return <p>Sign-in destination: {location.search}</p>
+    }
+
     render(
-      <MemoryRouter initialEntries={['/account']}>
+      <MemoryRouter initialEntries={['/account/symbols?view=saved#library']}>
         <AppAuthProvider value={authValue()}>
           <Routes>
-            <Route path="/account" element={<RequireAuthentication><p>Private account</p></RequireAuthentication>} />
-            <Route path="/sign-in" element={<p>Sign-in destination</p>} />
+            <Route path="/account/*" element={<RequireAuthentication><p>Private account</p></RequireAuthentication>} />
+            <Route path="/sign-in" element={<SignInDestination />} />
           </Routes>
         </AppAuthProvider>
       </MemoryRouter>,
     )
-    expect(await screen.findByText('Sign-in destination')).toBeVisible()
-  })
-
-  it('verifies a Clerk token with the application server and signs out', async () => {
-    const user = userEvent.setup()
-    const signOut = vi.fn(async () => undefined)
-    const auth = authValue({
-      signedIn: true,
-      userId: 'user_demo',
-      displayName: 'Demo Person',
-      email: 'demo@example.com',
-      getToken: async () => 'clerk-session-token',
-      signOut,
-    })
-    const view = render(
-      <MemoryRouter>
-        <AppAuthProvider value={auth}><AccountPage /></AppAuthProvider>
-      </MemoryRouter>,
+    expect(await screen.findByText(/Sign-in destination/)).toHaveTextContent(
+      'redirect_url=%2Faccount%2Fsymbols%3Fview%3Dsaved%23library',
     )
-
-    expect(screen.getByRole('heading', { name: 'Demo Person' })).toBeVisible()
-    expect(await screen.findByText('Your secure server session is active.')).toBeVisible()
-    await user.click(screen.getByRole('button', { name: 'Sign out' }))
-    expect(signOut).toHaveBeenCalledOnce()
-    await waitFor(() => expect(window.localStorage.length).toBe(0))
-    expect(window.sessionStorage.length).toBe(0)
-    await expectNoAccessibilityViolations(view.container)
   })
 })

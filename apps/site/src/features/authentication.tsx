@@ -8,14 +8,10 @@ import {
 import {
   createContext,
   useContext,
-  useEffect,
   useMemo,
-  useState,
   type ReactNode,
 } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
-import { getAppSession } from '../api'
-import { Button } from '../components/ui'
 import './authentication.css'
 
 export interface AppAuthValue {
@@ -25,7 +21,9 @@ export interface AppAuthValue {
   userId?: string
   displayName?: string
   email?: string
+  imageUrl?: string
   getToken(): Promise<string | null>
+  manageAccount(): void
   signOut(): Promise<void>
 }
 
@@ -34,6 +32,7 @@ const unavailableAuth: AppAuthValue = {
   loaded: true,
   signedIn: false,
   getToken: async () => null,
+  manageAccount: () => undefined,
   signOut: async () => undefined,
 }
 
@@ -51,7 +50,7 @@ export function AppAuthProvider({
 
 export function ClerkAuthBridge({ children }: { children: ReactNode }) {
   const auth = useAuth()
-  const { signOut } = useClerk()
+  const { openUserProfile, signOut } = useClerk()
   const { user } = useUser()
   const email = user?.primaryEmailAddress?.emailAddress
   const displayName = user?.fullName || user?.firstName || email || 'OpenSymbols user'
@@ -62,9 +61,11 @@ export function ClerkAuthBridge({ children }: { children: ReactNode }) {
     userId: auth.userId ?? undefined,
     displayName,
     email,
+    imageUrl: user?.imageUrl,
     getToken: () => auth.getToken(),
+    manageAccount: () => openUserProfile(),
     signOut: async () => { await signOut({ redirectUrl: '/' }) },
-  }), [auth, displayName, email, signOut])
+  }), [auth, displayName, email, openUserProfile, signOut, user?.imageUrl])
 
   return <AppAuthProvider value={value}>{children}</AppAuthProvider>
 }
@@ -188,39 +189,4 @@ export function RequireAuthentication({ children }: { children: ReactNode }) {
   }
 
   return children
-}
-
-export function AccountPage() {
-  const auth = useAppAuth()
-  const [serverState, setServerState] = useState<'checking' | 'verified' | 'failed'>('checking')
-
-  useEffect(() => {
-    let active = true
-    getAppSession(auth.getToken)
-      .then((session) => {
-        if (active) setServerState(session.user_id === auth.userId ? 'verified' : 'failed')
-      })
-      .catch(() => {
-        if (active) setServerState('failed')
-      })
-    return () => { active = false }
-  }, [auth.getToken, auth.userId])
-
-  return (
-    <section className="content-page account-page">
-      <p className="eyebrow">Your OpenSymbols account</p>
-      <h1>{auth.displayName}</h1>
-      {auth.email && <p>{auth.email}</p>}
-      <p>
-        Your account is ready. Saved characters, personalized symbols, and symbol packs will be added in dedicated
-        future phases.
-      </p>
-      <p className={`account-session account-session--${serverState}`} role="status">
-        {serverState === 'checking' && 'Checking the secure server session…'}
-        {serverState === 'verified' && 'Your secure server session is active.'}
-        {serverState === 'failed' && 'Your browser session is active, but the server could not verify it.'}
-      </p>
-      <Button onClick={() => void auth.signOut()}>Sign out</Button>
-    </section>
-  )
 }

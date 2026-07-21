@@ -59,6 +59,7 @@ describe('site layout', () => {
       loaded: true,
       signedIn: false,
       getToken: async () => null,
+      manageAccount: () => undefined,
       signOut: async () => undefined,
     }
     render(
@@ -82,6 +83,7 @@ describe('site layout', () => {
       userId: 'user_demo',
       displayName: 'Demo Person',
       getToken: async () => 'clerk-session-token',
+      manageAccount: () => undefined,
       signOut: async () => undefined,
     }
     render(
