@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { checkSession } from '../api'
 import { useAppAuth } from '../features/authentication'
 import { ClerkUserControl } from '../features/clerk-user-control'
-import { PageContainer } from './ui'
+import { BrandEndorsement, PageContainer } from './ui'
 import './layout.css'
 
 function useSession() {
@@ -76,17 +76,20 @@ export function SiteLayout({ children }: { children: ReactNode }) {
       <a className="skip-link" href="#main">Skip to content</a>
       <header className="site-header site-header--sticky" ref={headerRef}>
         <PageContainer className="site-header__inner">
-          <Link className="identity" to="/" aria-label="Open Symbols home">
-            <img src="/open-symbols-mark.svg" alt="" />
-            <span>
+          <div className="identity-lockup">
+            <Link className="identity" to="/" aria-label="Open Symbols home">
+              <img src="/open-symbols-mark.svg" alt="" />
               <strong>Open Symbols</strong>
-              <small>Open communication symbols for everyone</small>
-            </span>
-          </Link>
+            </Link>
+            <BrandEndorsement
+              href="https://www.openaac.org"
+              brandName="OpenAAC"
+              iconSrc="https://www.openaac.org/openaac.svg"
+            />
+          </div>
           <nav className="site-navigation" aria-label="Primary navigation">
             <Link to="/search">Search symbols</Link>
             <Link to="/api">API documentation</Link>
-            <a href="https://www.openaac.org">OpenAAC</a>
             {account.configured && account.loaded && !account.signedIn && <Link to="/sign-in">Sign in</Link>}
             {account.configured && account.loaded && !account.signedIn && <Link to="/sign-up">Create account</Link>}
             {account.configured && account.loaded && account.signedIn && <ClerkUserControl />}

@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
@@ -6,6 +6,7 @@ import { expectNoAccessibilityViolations } from '../test/axe'
 import {
   Avatar,
   Badge,
+  BrandEndorsement,
   Button,
   ButtonAnchor,
   ButtonLink,
@@ -48,6 +49,51 @@ describe('action primitives', () => {
     expect(screen.getByRole('link', { name: 'External guide' })).toHaveAttribute('target', '_blank')
     expect(screen.getByRole('link', { name: 'Account card' })).toHaveClass('card-link', 'feature-card')
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+})
+
+describe('BrandEndorsement', () => {
+  it('renders a named link, visible preposition, controlled icon, and native props', () => {
+    render(
+      <BrandEndorsement
+        href="https://example.org"
+        brandName="ExampleOrg"
+        iconSrc="https://example.org/brand.svg"
+        className="feature-endorsement"
+        data-track="endorsement"
+        target="_blank"
+      />,
+    )
+
+    const link = screen.getByRole('link', { name: 'by ExampleOrg' })
+    expect(link).toHaveAttribute('href', 'https://example.org')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('data-track', 'endorsement')
+    expect(link).toHaveClass('brand-endorsement', 'feature-endorsement')
+    expect(link).toHaveTextContent(/^by$/)
+    expect(link).not.toHaveTextContent('-')
+
+    const image = link.querySelector('img')
+    expect(image).toHaveAttribute('src', 'https://example.org/brand.svg')
+    expect(image).toHaveAttribute('alt', '')
+    expect(image).toHaveAttribute('decoding', 'async')
+    expect(image).toHaveAttribute('referrerpolicy', 'no-referrer')
+  })
+
+  it('removes a failed image while retaining the reserved box and link', () => {
+    render(<BrandEndorsement href="https://example.org" brandName="ExampleOrg" iconSrc="https://example.org/brand.svg" />)
+    const link = screen.getByRole('link', { name: 'by ExampleOrg' })
+    const icon = link.querySelector('.brand-endorsement__icon')
+    fireEvent.error(link.querySelector('img') as HTMLImageElement)
+
+    expect(screen.getByRole('link', { name: 'by ExampleOrg' })).toHaveAttribute('href', 'https://example.org')
+    expect(icon).toBeInTheDocument()
+    expect(icon).toBeEmptyDOMElement()
+  })
+
+  it('has no automated accessibility violations', async () => {
+    const view = render(<BrandEndorsement href="https://example.org" brandName="ExampleOrg" iconSrc="https://example.org/brand.svg" />)
+    await expectNoAccessibilityViolations(view.container)
   })
 })
 
