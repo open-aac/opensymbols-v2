@@ -83,7 +83,7 @@ export function SiteLayout({ children }: { children: ReactNode }) {
               <strong>Open Symbols</strong>
             </Link>
             <a className="identity-endorsement" href="https://www.openaac.org" aria-label="by OpenAAC">
-              <span aria-hidden="true">- by</span>
+              <span aria-hidden="true">by</span>
               <span className="identity-endorsement__badge">
                 {!openAacBadgeFailed && (
                   <img

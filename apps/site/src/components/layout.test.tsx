@@ -65,7 +65,8 @@ describe('site layout', () => {
     const navigation = within(screen.getByRole('navigation', { name: 'Primary navigation' }))
 
     expect(endorsementLink).toHaveAttribute('href', 'https://www.openaac.org')
-    expect(endorsementLink).toHaveTextContent('- by')
+    expect(endorsementLink).toHaveTextContent('by')
+    expect(endorsementLink).not.toHaveTextContent('-')
     expect(endorsementLink.parentElement).toBe(homeLink.parentElement)
     expect(badge).toHaveAttribute('src', 'https://www.openaac.org/openaac.svg')
     expect(badge).toHaveAttribute('alt', '')
