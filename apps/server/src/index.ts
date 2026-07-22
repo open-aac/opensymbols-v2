@@ -14,6 +14,7 @@ const publicReadStore = createPostgresPublicReadStore({
 const app = createApp({
   siteRoot,
   publicReadStore,
+  publicDiscoveryStore: publicReadStore,
   s3Bucket: process.env.S3_BUCKET,
   s3Cdn: process.env.S3_CDN,
   appSessionVerifier: clerkSessionVerifierFromEnvironment(),

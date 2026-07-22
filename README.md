@@ -55,8 +55,9 @@ Hono derives its local read-only PostgreSQL connection from `POSTGRES_USER`,
 `POSTGRES_PASSWORD`, `POSTGRES_DB`, and `POSTGRES_PORT`, or uses an explicit
 `DATABASE_URL`. PostgreSQL is published only on the loopback interface. The
 typed store understands the legacy GoSecure `settings` format. Hono owns
-anonymous repository listing, repository detail, and symbol detail reads;
-credential-bearing requests and all other API routes remain with Rails.
+anonymous repository reads, symbol detail, random symbols, repository symbols,
+public symbol search, and symbol requests. The documented v2 token and
+authorized-search routes remain with Rails.
 
 Seed the local database with repeatable demo repositories, symbols, defaults,
 requests, and an approved development API source:
@@ -72,10 +73,9 @@ from `http://localhost:5173/demo-symbols` by default; override
 source token is `local-development-shared-secret`. These values are for local
 development only, and the seed refuses to run in production.
 
-Development and test searches use the seeded PostgreSQL data when no
-Elasticsearch URL is configured. The fallback preserves the existing symbol
-search response and visibility rules, so the React search page works without
-cloud services. Production continues to require Elasticsearch.
+Public discovery searches run directly against decoded symbol records in
+PostgreSQL. Hono preserves the React search contract without requiring
+Elasticsearch or another search service.
 
 ## User accounts
 

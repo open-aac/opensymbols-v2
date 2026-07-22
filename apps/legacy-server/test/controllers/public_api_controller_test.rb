@@ -56,15 +56,6 @@ class PublicApiControllerTest < ActionDispatch::IntegrationTest
     assert_equal 'Example Designer', body['symbol']['author']
   end
 
-  test 'searches public symbols without Elasticsearch' do
-    get '/api/v1/symbols/search', params: {q: 'hello', locale: 'en', safe: '1'}
-
-    assert_response :success
-    body = JSON.parse(response.body)
-    assert_equal ['hello-a1'], body.map { |symbol| symbol['symbol_key'] }
-    assert_equal 'Hello', body.first['name']
-  end
-
   test 'hides protected repositories and symbols' do
     @repo.settings['protected'] = true
     @repo.save!
@@ -83,29 +74,6 @@ class PublicApiControllerTest < ActionDispatch::IntegrationTest
 
     get '/api/v2/symbols/demo/hello-a1'
     assert_response :not_found
-  end
-
-  test 'accepts a valid public symbol request' do
-    assert_difference('SymbolRequest.count', 1) do
-      post '/api/v1/symbols/requests', params: {
-        name: 'Bacon',
-        first_letter: 'b',
-        comments: 'A clear picture of bacon'
-      }
-    end
-    assert_response :success
-    assert JSON.parse(response.body)['submitted']
-  end
-
-  test 'rejects symbol request honeypot mismatches' do
-    assert_no_difference('SymbolRequest.count') do
-      post '/api/v1/symbols/requests', params: {
-        name: 'Bacon',
-        first_letter: 'x',
-        comments: 'A clear picture of bacon'
-      }
-    end
-    assert_response :unprocessable_entity
   end
 
   test 'generates a shared secret for a valid application' do

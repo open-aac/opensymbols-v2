@@ -8,13 +8,20 @@ import {
   listPublicRepositories,
   type PublicReadImageOptions,
 } from './public-read-api.js'
-import type { PublicReadStore } from './public-read-store.js'
+import {
+  listPublicRepositorySymbols,
+  randomPublicSymbols,
+  searchPublicSymbols,
+  submitPublicSymbolRequest,
+} from './public-discovery-api.js'
+import type { PublicDiscoveryStore, PublicReadStore } from './public-read-store.js'
 import type { AppSessionVerifier } from './clerk-auth.js'
 
 export interface AppOptions {
   legacyServerUrl?: string
   legacyServerTimeoutMs?: number
   publicReadStore?: PublicReadStore
+  publicDiscoveryStore?: PublicDiscoveryStore
   s3Bucket?: string
   s3Cdn?: string
   siteRoot?: string
@@ -102,10 +109,81 @@ export function createApp(options: AppOptions = {}) {
     })
   }
 
-  app.get('/api/v1/repositories/:repoKey/symbols', legacyProxy)
-  app.get('/api/v1/symbols/search', legacyProxy)
-  app.get('/api/v1/symbols/random', legacyProxy)
-  app.post('/api/v1/symbols/requests', legacyProxy)
+  if (options.publicDiscoveryStore) {
+    const store = options.publicDiscoveryStore
+    const imageOptions: PublicReadImageOptions = {
+      s3Bucket: options.s3Bucket,
+      s3Cdn: options.s3Cdn,
+    }
+    const page = (value: string | undefined) => {
+      const parsed = Number.parseInt(value ?? '0', 10)
+      return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0
+    }
+
+    app.get('/api/v1/symbols/random', async (context) => {
+      try {
+        return context.json(await randomPublicSymbols(store, imageOptions))
+      } catch {
+        return context.json({ error: 'database_unavailable' as const }, 503)
+      }
+    })
+
+    app.get('/api/v1/repositories/:repoKey/symbols', async (context) => {
+      try {
+        const result = await listPublicRepositorySymbols(store, context.req.param('repoKey'), {
+          page: page(context.req.query('page')),
+          unsafe: context.req.query('unsafe') === '1',
+          hasSkin: context.req.query('has_skin') === '1',
+          image: imageOptions,
+        })
+        if (result.kind === 'not_found') return context.json({ error: 'not found' }, 404)
+        return context.json({
+          symbols: result.symbols,
+          ...(result.nextUrl ? { meta: { next_url: result.nextUrl } } : {}),
+        })
+      } catch {
+        return context.json({ error: 'database_unavailable' as const }, 503)
+      }
+    })
+
+    app.get('/api/v1/symbols/search', async (context) => {
+      try {
+        return context.json(await searchPublicSymbols(store, {
+          query: context.req.query('q') ?? '',
+          locale: context.req.query('locale'),
+          safe: context.req.query('safe') !== '0',
+          page: page(context.req.query('page')),
+          image: imageOptions,
+        }))
+      } catch {
+        return context.json({ error: 'database_unavailable' as const }, 503)
+      }
+    })
+
+    app.post('/api/v1/symbols/requests', async (context) => {
+      let input: unknown
+      try {
+        input = await context.req.json()
+      } catch {
+        return context.json({ error: 'invalid symbol request' }, 422)
+      }
+      if (!input || Array.isArray(input) || typeof input !== 'object') {
+        return context.json({ error: 'invalid symbol request' }, 422)
+      }
+      try {
+        const submitted = await submitPublicSymbolRequest(
+          store,
+          input as { name?: unknown; first_letter?: unknown; comments?: unknown },
+          new Date().toISOString(),
+        )
+        if (!submitted) return context.json({ error: 'invalid symbol request' }, 422)
+        return context.json({ submitted: true as const })
+      } catch {
+        return context.json({ error: 'database_unavailable' as const }, 503)
+      }
+    })
+  }
+
   app.post('/api/v2/generate_secret', legacyProxy)
   app.post('/api/v2/token', legacyProxy)
   app.get('/api/v2/symbols', legacyProxy)

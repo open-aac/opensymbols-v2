@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decodeGoSecure, GoSecureDecodeError } from './go-secure.js'
+import { decodeGoSecure, encodeGoSecure, GoSecureDecodeError } from './go-secure.js'
 
 const expected = {
   name: 'Contract',
@@ -41,5 +41,23 @@ describe('decodeGoSecure', () => {
 
   it('rejects an incorrect encryption key', () => {
     expect(() => decodeGoSecure(rubyEncrypted, 'incorrect-encryption-key')).toThrow(GoSecureDecodeError)
+  })
+})
+
+describe('encodeGoSecure', () => {
+  it('writes the unencrypted marker format', () => {
+    expect(encodeGoSecure(expected)).toBe(`**${JSON.stringify(expected)}`)
+  })
+
+  it('round trips the encrypted Ruby-compatible format with an injected IV', () => {
+    const encoded = encodeGoSecure(
+      expected,
+      'test-secure-encryption-key',
+      () => Buffer.from('000102030405060708090a0b0c0d0e0f', 'hex'),
+    )
+
+    expect(encoded).toMatch(/^AAECAwQFBgcICQoLDA0ODw==\n--/)
+    expect(encoded.endsWith('\n')).toBe(true)
+    expect(decodeGoSecure(encoded, 'test-secure-encryption-key')).toEqual(expected)
   })
 })

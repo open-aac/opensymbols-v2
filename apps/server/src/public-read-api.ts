@@ -60,15 +60,19 @@ function fullImageUrl(symbol: SymbolRecord, options: PublicReadImageOptions) {
   return url
 }
 
-function symbolJson(symbol: SymbolRecord, options: PublicReadImageOptions): PublicSymbol {
-  const localized = symbol.settings.locales?.en
+export function publicSymbolJson(
+  symbol: SymbolRecord,
+  options: PublicReadImageOptions,
+  locale = 'en',
+): PublicSymbol {
+  const localized = symbol.settings.locales?.[locale] ?? symbol.settings.locales?.en
   const baseDescription = nullableString(symbol.settings.description)
   return {
     id: symbol.id,
     symbol_key: symbol.symbolKey,
     name: nullableString(localized?.name) ?? nullableString(symbol.settings.name),
     description: nullableString(localized?.description) ?? baseDescription,
-    locale: 'en',
+    locale,
     license: nullableString(symbol.settings.license),
     license_url: nullableString(symbol.settings.license_url),
     enabled: typeof symbol.settings.enabled === 'boolean' ? symbol.settings.enabled : null,
@@ -128,5 +132,5 @@ export async function findPublicSymbol(
     return { kind: 'not_found', id: `${repoKey}/${symbolKey}` }
   }
 
-  return { kind: 'found', symbol: symbolJson(symbol, imageOptions) }
+  return { kind: 'found', symbol: publicSymbolJson(symbol, imageOptions) }
 }
