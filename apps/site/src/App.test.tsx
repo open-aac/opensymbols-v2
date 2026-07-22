@@ -179,18 +179,20 @@ describe('public discovery', () => {
 
   it('renders repository metadata, filters, and pagination', async () => {
     const user = userEvent.setup()
-    renderApp('/repositories/demo')
+    const view = renderApp('/repositories/demo')
 
     expect(await screen.findByRole('heading', { name: 'Demo Symbols' })).toBeInTheDocument()
     expect(screen.getByText('Example Designer')).toBeInTheDocument()
     expect(screen.getByLabelText('Skin Tone')).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: 'More Symbols' })).toBeInTheDocument()
     expect(document.querySelectorAll('.symbol-card')).toHaveLength(2)
+    expect(document.querySelector('.symbol-grid')).toHaveClass('responsive-grid')
 
     await user.click(screen.getByRole('button', { name: 'More Symbols' }))
     await waitFor(() => expect(document.querySelectorAll('.symbol-card')).toHaveLength(4))
     await user.selectOptions(screen.getByLabelText('Filter'), 'skins')
     await waitFor(() => expect(screen.getByLabelText('Filter')).toHaveValue('skins'))
+    await expectNoAccessibilityViolations(view.container)
   })
 
   it('renders symbol attribution without a public admin handoff', async () => {
