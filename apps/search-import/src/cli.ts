@@ -1,4 +1,6 @@
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { createReadStream } from 'node:fs'
 import { readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -6,7 +8,12 @@ import { readJsonl } from './jsonl.js'
 import { MeilisearchImportClient, MeilisearchImportError } from './meilisearch.js'
 import { BENCHMARK_DOCUMENT_COUNT, prepareDataset } from './transform.js'
 import type { RepositoryDocument, SearchDocument } from './types.js'
-import { uploadWithCheckpoint } from './checkpoint.js'
+import {
+  completedForCheckpoint,
+  uploadCheckpoint,
+  uploadWithCheckpoint,
+  type CheckpointIdentity,
+} from './checkpoint.js'
 
 const packageRoot = fileURLToPath(new URL('../', import.meta.url))
 const repositoryRoot = resolve(packageRoot, '../..')
@@ -38,6 +45,12 @@ async function exists(path: string) {
   try { await stat(path); return true } catch { return false }
 }
 
+async function sha256File(path: string) {
+  const hash = createHash('sha256')
+  for await (const chunk of createReadStream(path)) hash.update(chunk)
+  return hash.digest('hex')
+}
+
 async function prepare() {
   const dataset = resolve(option('dataset', defaultDataset)!)
   const output = resolve(option('output', defaultPrepared)!)
@@ -63,9 +76,9 @@ async function prepare() {
   console.log(JSON.stringify({ output, ...cutoff }, null, 2))
 }
 
-async function checkpoint(path: string) {
+async function checkpoint(path: string, identity: CheckpointIdentity) {
   return await exists(path)
-    ? (JSON.parse(await readFile(path, 'utf8')) as { completed: number }).completed
+    ? completedForCheckpoint(JSON.parse(await readFile(path, 'utf8')), identity)
     : 0
 }
 
@@ -82,9 +95,19 @@ async function importData() {
   await importer.waitForTask(repositoryTask.taskUid)
 
   const checkpointPath = join(prepared, 'meilisearch.checkpoint.json')
+  const sourceManifest = await readFile(join(prepared, 'source-manifest.json'))
+  const index = await importer.indexInfo(importer.symbolIndex)
+  if (!index.createdAt) throw new Error('Meilisearch did not return the symbol index creation time.')
+  const identity: CheckpointIdentity = {
+    sourceManifestSha256: createHash('sha256').update(sourceManifest).digest('hex'),
+    documentsSha256: await sha256File(join(prepared, 'documents.jsonl.gz')),
+    host: requiredEnvironment('MEILISEARCH_HOST').replace(/\/$/, ''),
+    symbolIndex: importer.symbolIndex,
+    symbolIndexCreatedAt: index.createdAt,
+  }
   const completed = await uploadWithCheckpoint({
     records: readJsonl<SearchDocument>(join(prepared, 'documents.jsonl.gz')),
-    completed: await checkpoint(checkpointPath),
+    completed: await checkpoint(checkpointPath, identity),
     batchSize: 500,
     async upload(batch) {
       const task = await importer.uploadSymbols(batch)
@@ -92,7 +115,7 @@ async function importData() {
       await importer.waitForTask(task.taskUid)
     },
     async save(count) {
-      await writeFile(checkpointPath, `${JSON.stringify({ completed: count })}\n`)
+      await writeFile(checkpointPath, `${JSON.stringify(uploadCheckpoint(count, identity))}\n`)
     },
   })
   console.log(JSON.stringify({ repositories: repositories.length, documents: completed }, null, 2))

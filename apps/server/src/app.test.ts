@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { app, createApp } from './app.js'
+import type { DiscoveryCatalog } from './discovery-catalog.js'
 
 describe('GET /api/health', () => {
   it('reports that the server is healthy', async () => {
@@ -26,6 +27,16 @@ describe('synthetic symbol images', () => {
 
   it('rejects malformed synthetic image specifications', async () => {
     expect((await app.request('/api/synthetic-images/not-a-symbol.svg')).status).toBe(404)
+  })
+
+  it('reports discovery catalog failures', async () => {
+    const discoveryCatalog = {
+      provider: 'meilisearch',
+      health: async () => { throw new Error('unavailable') },
+    } as unknown as DiscoveryCatalog
+    const response = await createApp({ discoveryCatalog }).request('/api/health')
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toEqual({ status: 'unavailable' })
   })
 })
 

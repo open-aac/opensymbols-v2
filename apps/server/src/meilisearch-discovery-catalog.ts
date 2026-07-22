@@ -195,7 +195,10 @@ export class MeilisearchDiscoveryCatalog implements DiscoveryCatalog {
   }
 
   async health() {
-    await this.call('/health')
+    await Promise.all([
+      this.search(this.symbolIndex, { q: '', limit: 0 }),
+      this.search(this.repositoryIndex, { q: '', limit: 0 }),
+    ])
   }
 
   async listRepositories() {
@@ -292,49 +295,64 @@ export class MeilisearchDiscoveryCatalog implements DiscoveryCatalog {
     filter.push(locale === 'en' ? 'locale = "en"' : `(locale = ${quotedFilter(locale)} OR locale = "en")`)
 
     const desired = (options.page + 1) * SEARCH_PAGE_SIZE
-    const result = await this.search<MeilisearchSymbol>(this.symbolIndex, {
-      q: query,
-      limit: Math.min(1_000, Math.max(100, desired * 2)),
-      filter,
-      showRankingScore: true,
-    })
     const symbolOrder: number[] = []
     const symbolById = new Map<number, MeilisearchSymbol>()
-    for (const symbol of result.hits ?? []) {
-      const existing = symbolById.get(symbol.symbolId)
-      if (!existing) symbolOrder.push(symbol.symbolId)
-      if (!existing || (existing.locale !== locale && symbol.locale === locale)) {
-        symbolById.set(symbol.symbolId, symbol)
+    let offset = 0
+    while (symbolOrder.length < desired) {
+      const result = await this.search<MeilisearchSymbol>(this.symbolIndex, {
+        q: query,
+        limit: 1_000,
+        offset,
+        filter,
+        showRankingScore: true,
+      })
+      const hits = result.hits ?? []
+      for (const symbol of hits) {
+        if (!symbolById.has(symbol.symbolId)) {
+          symbolOrder.push(symbol.symbolId)
+          symbolById.set(symbol.symbolId, symbol)
+        }
+      }
+      offset += hits.length
+      const total = result.estimatedTotalHits ?? result.totalHits ?? offset
+      if (hits.length < 1_000 || offset >= total) break
+    }
+
+    const pageIds = symbolOrder.slice(options.page * SEARCH_PAGE_SIZE, desired)
+    if (locale !== 'en' && pageIds.length) {
+      const localized = await this.search<MeilisearchSymbol>(this.symbolIndex, {
+        q: '',
+        limit: pageIds.length,
+        filter: [
+          `symbolId IN [${pageIds.join(', ')}]`,
+          `locale = ${quotedFilter(locale)}`,
+          'visible = true',
+        ],
+      })
+      for (const symbol of localized.hits ?? []) {
+        const rankedSymbol = symbolById.get(symbol.symbolId)
+        symbolById.set(symbol.symbolId, {
+          ...symbol,
+          _rankingScore: rankedSymbol?._rankingScore,
+        })
       }
     }
-    const candidates = symbolOrder.map((symbolId) => symbolById.get(symbolId)!)
-    const repositoryCounts = new Map<string, number>()
-    let ranked = candidates.map((symbol) => {
-      const repositoryIndex = (repositoryCounts.get(symbol.repoKey) ?? 0) + 1
-      repositoryCounts.set(symbol.repoKey, repositoryIndex)
-      const boost = symbol.keywordBoosts.find((item) => normalize(item.term) === query)?.weight ?? 0
-      return {
-        symbol,
-        useScore: boost,
-        relevance: Math.round((symbol._rankingScore ?? 0) * 1_000) + boost,
-        repositoryIndex: repositoryIndex <= 5 ? 2 : repositoryIndex <= 10 ? 1 : 0,
-      }
-    })
 
-    if (favorFilter.value) {
+    let ranked = pageIds.map((symbolId) => symbolById.get(symbolId)!)
+
+    if (favorFilter.value && options.page === 0) {
       const favored = ranked.slice(0, 10)
-        .filter((entry) => entry.symbol.repoKey.toLowerCase() === favorFilter.value)
-      const favoredIds = new Set(favored.map((entry) => entry.symbol.symbolId))
-      ranked = [...favored, ...ranked.filter((entry) => !favoredIds.has(entry.symbol.symbolId))]
+        .filter((symbol) => symbol.repoKey.toLowerCase() === favorFilter.value)
+      const favoredIds = new Set(favored.map((symbol) => symbol.symbolId))
+      ranked = [...favored, ...ranked.filter((symbol) => !favoredIds.has(symbol.symbolId))]
     }
 
     return ranked
-      .slice(options.page * SEARCH_PAGE_SIZE, desired)
-      .map((entry) => ({
-        ...publicSymbol(entry.symbol, locale),
-        use_score: entry.useScore,
-        relevance: entry.relevance,
-        repo_index: entry.repositoryIndex,
+      .map((symbol) => ({
+        ...publicSymbol(symbol, locale),
+        use_score: 0,
+        relevance: symbol._rankingScore ?? 0,
+        repo_index: 0,
       }))
   }
 

@@ -54,16 +54,19 @@ describe('Meilisearch discovery catalog', () => {
   })
 
   it('uses locale fallback and safe/repository filters while deduplicating symbols', async () => {
-    const { value, request } = catalog([{ hits: [
-      symbol(),
-      symbol({ id: '1_es', locale: 'es', name: 'hola' }),
-      symbol({ id: '2_en', symbolId: 2, symbolKey: 'symbol-0000002' }),
-    ] }])
+    const { value, request } = catalog([
+      { hits: [
+        symbol(),
+        symbol({ id: '1_es', locale: 'es', name: 'hola' }),
+        symbol({ id: '2_en', symbolId: 2, symbolKey: 'symbol-0000002' }),
+      ], estimatedTotalHits: 3 },
+      { hits: [symbol({ id: '1_es', locale: 'es', name: 'hola' })] },
+    ])
     const results = await value.searchSymbols({
       query: 'hola repo:core-aac', locale: 'es-MX', safe: true, page: 0,
     })
     expect(results).toHaveLength(2)
-    expect(results[0]).toMatchObject({ id: 1, locale: 'es', use_score: 0 })
+    expect(results[0]).toMatchObject({ id: 1, locale: 'es', use_score: 0, relevance: 0.9 })
     const body = JSON.parse(String(request.mock.calls[0]![1]!.body))
     expect(body.q).toBe('hola')
     expect(body.filter).toContain('safe = true')
@@ -72,13 +75,32 @@ describe('Meilisearch discovery catalog', () => {
   })
 
   it('keeps the generated Simplified Chinese locale identifier', async () => {
-    const { value, request } = catalog([{ hits: [symbol({ locale: 'zh-CN', name: '你好' })] }])
+    const { value, request } = catalog([
+      { hits: [symbol({ locale: 'zh-CN', name: '你好' })], estimatedTotalHits: 1 },
+      { hits: [symbol({ locale: 'zh-CN', name: '你好' })] },
+    ])
     const results = await value.searchSymbols({
       query: '你好', locale: 'zh-CN', safe: true, page: 0,
     })
     expect(results[0]?.locale).toBe('zh-CN')
     const body = JSON.parse(String(request.mock.calls[0]![1]!.body))
     expect(body.filter).toContain('(locale = "zh-CN" OR locale = "en")')
+  })
+
+  it('continues fetching unique results beyond the first 1,000 localization hits', async () => {
+    const firstBatch = Array.from({ length: 1_000 }, (_, index) =>
+      symbol({ id: `${index + 1}_en`, symbolId: index + 1, symbolKey: `symbol-${index + 1}` }))
+    const secondBatch = Array.from({ length: 100 }, (_, index) =>
+      symbol({ id: `${index + 1001}_en`, symbolId: index + 1001, symbolKey: `symbol-${index + 1001}` }))
+    const { value, request } = catalog([
+      { hits: firstBatch, estimatedTotalHits: 1_100 },
+      { hits: secondBatch, estimatedTotalHits: 1_100 },
+    ])
+    const results = await value.searchSymbols({ query: '', locale: 'en', safe: true, page: 20 })
+    expect(results).toHaveLength(50)
+    expect(results[0]?.id).toBe(1001)
+    const secondBody = JSON.parse(String(request.mock.calls[1]![1]!.body))
+    expect(secondBody.offset).toBe(1_000)
   })
 
   it('maps repository pagination and unsafe filtering', async () => {

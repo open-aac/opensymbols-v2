@@ -14,6 +14,7 @@ const publicReadStore = createPostgresPublicReadStore({
 })
 const imageOptions = { s3Bucket: process.env.S3_BUCKET, s3Cdn: process.env.S3_CDN }
 const discoveryCatalog = discoveryCatalogFromEnvironment(publicReadStore, imageOptions)
+await discoveryCatalog.health()
 const app = createApp({
   siteRoot,
   publicReadStore,

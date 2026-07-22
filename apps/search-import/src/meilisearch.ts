@@ -112,6 +112,10 @@ export class MeilisearchImportClient {
     return this.call(`/indexes/${index}/stats`) as Promise<{ numberOfDocuments?: number; isIndexing?: boolean }>
   }
 
+  async indexInfo(index: string) {
+    return this.call(`/indexes/${index}`) as Promise<{ uid?: string; createdAt?: string }>
+  }
+
   async publicRepositoryCount() {
     const result = await this.call(`/indexes/${this.repositoryIndex}/search`, {
       method: 'POST',

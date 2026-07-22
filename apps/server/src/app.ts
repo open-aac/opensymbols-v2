@@ -54,7 +54,14 @@ export function createApp(options: AppOptions = {}) {
   )
   const symbolRequestStore = options.symbolRequestStore ?? options.publicDiscoveryStore
 
-  app.get('/api/health', (context) => context.json({ status: 'ok' as const }))
+  app.get('/api/health', async (context) => {
+    try {
+      await catalog?.health()
+      return context.json({ status: 'ok' as const })
+    } catch {
+      return context.json({ status: 'unavailable' as const }, 503)
+    }
+  })
 
   app.get('/api/app/session', async (context) => {
     if (!options.appSessionVerifier) {
