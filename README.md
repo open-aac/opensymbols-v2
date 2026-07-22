@@ -106,6 +106,23 @@ routes have been removed. Clerk-backed administrator authorization and tools
 are tracked separately. No database user table, webhook, roles, saved
 characters, symbol packs, or personalization is included yet.
 
+## Search benchmark data
+
+Generate deterministic, provider-neutral JSONL for search experiments without
+using production data:
+
+```sh
+pnpm data:generate --preset relevance
+pnpm data:generate --preset 100k --seed 42
+```
+
+The supported presets are `relevance`, `100k`, `500k`, and `1m`. Output is
+gzip-compressed under `.benchmark-data` by default; use `--compression none`
+or `--output <directory>` when required by an importer. Existing output is
+never replaced unless `--force` is supplied and its manifest identifies it as
+generator-owned. `pnpm data:scale` runs the explicit one-million-symbol scale
+generation and reports duration, output size, and peak memory.
+
 ## Verify
 
 ```sh

@@ -1,6 +1,7 @@
 node_modules/
 dist/
 coverage/
+.benchmark-data/
 *.log
 .env
 .env.*
