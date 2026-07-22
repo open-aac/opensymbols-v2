@@ -42,6 +42,7 @@ export interface SearchDocument {
   name: string
   description: string
   englishName: string
+  englishDescription: string
   searchTerms: string[]
   synonyms: string[]
   keywordBoosts: Array<{ term: string; weight: number }>

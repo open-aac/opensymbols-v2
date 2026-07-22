@@ -5,7 +5,7 @@ import type { SearchDocument } from './types.js'
 const document: SearchDocument = {
   id: '1_en', symbolId: 1, symbolKey: 'symbol-0000001', repoKey: 'core-aac',
   locale: 'en', safe: true, visible: true, name: 'hello', description: 'A greeting',
-  englishName: 'hello', searchTerms: ['hello'], synonyms: ['hi'],
+  englishName: 'hello', englishDescription: 'A greeting', searchTerms: ['hello'], synonyms: ['hi'],
   keywordBoosts: [{ term: 'hello', weight: 2 }], text: 'hello\nA greeting\nhi',
   imageUrl: 'https://assets.example.invalid/symbols/0000001.svg', enabled: true,
   protected: false, hasSkin: true, hasVariants: true, license: 'CC0-1.0',

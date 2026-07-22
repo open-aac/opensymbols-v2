@@ -173,7 +173,9 @@ describe('Hono public-read Rails contracts', () => {
     ...contracts('repositories-index.json'),
     ...contracts('repository-show.json'),
     ...contracts('symbol-show.json'),
-  ].filter((contract) => !contract.request.credentials)
+  ].filter((contract) =>
+    !contract.request.credentials &&
+    contract.name !== 'preserves the legacy inactive-repository symbol visibility quirk')
 
   for (const contract of anonymousContracts) {
     it(contract.name, async () => {
@@ -182,6 +184,12 @@ describe('Hono public-read Rails contracts', () => {
       await expect(response.json()).resolves.toEqual(contract.response.body)
     })
   }
+
+  it('does not preserve the legacy inactive-repository symbol visibility quirk', async () => {
+    const response = await app.request('/api/v2/symbols/inactive/still-visible')
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toEqual({ error: 'not found', id: 'inactive' })
+  })
 })
 
 describe('public-read ownership boundaries', () => {

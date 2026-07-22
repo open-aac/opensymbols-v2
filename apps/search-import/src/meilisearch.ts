@@ -69,7 +69,7 @@ export class MeilisearchImportClient {
         'repoKey', 'locale', 'safe', 'visible', 'symbolKey', 'symbolId', 'hasSkin',
       ],
       searchableAttributes: [
-        'name', 'description', 'searchTerms', 'synonyms', 'englishName', 'text',
+        'name', 'description', 'searchTerms', 'synonyms', 'englishName', 'englishDescription', 'text',
       ],
       sortableAttributes: ['symbolId'],
       pagination: { maxTotalHits: 120_000 },
@@ -77,6 +77,7 @@ export class MeilisearchImportClient {
     await this.task(`/indexes/${this.repositoryIndex}/settings`, {
       filterableAttributes: ['repoKey', 'active', 'protected'],
       sortableAttributes: ['name'],
+      pagination: { maxTotalHits: 10_000 },
     }, 'PATCH')
   }
 

@@ -9,6 +9,8 @@ import type { PublicRepository, PublicSymbol } from './public-read-types.js'
 
 const SEARCH_PAGE_SIZE = 50
 const REPOSITORY_PAGE_SIZE = 60
+const MAX_SEARCH_PAGE = 99
+const PROVIDER_BATCH_SIZE = 1_000
 
 export interface MeilisearchDiscoveryConfig {
   host: string
@@ -43,6 +45,7 @@ interface MeilisearchSymbol {
   name: string
   description: string
   englishName: string
+  englishDescription: string
   searchTerms: string[]
   synonyms: string[]
   keywordBoosts: Array<{ term: string; weight: number }>
@@ -72,7 +75,12 @@ function normalize(value: string) {
 
 function normalizedLocale(value: string | undefined) {
   const locale = normalize(value || 'en').replace('_', '-')
-  if (locale === 'zh' || locale.startsWith('zh-')) return 'zh-CN'
+  if (
+    locale === 'zh-cn' ||
+    locale === 'zh-sg' ||
+    locale === 'zh-hans' ||
+    locale.startsWith('zh-hans-')
+  ) return 'zh-CN'
   return locale.split('-')[0] || 'en'
 }
 
@@ -113,7 +121,7 @@ function publicSymbol(document: MeilisearchSymbol, locale = document.locale): Pu
     author_url: document.authorUrl,
     source_url: document.sourceUrl,
     repo_key: document.repoKey,
-    hc: /\bhc\b/.test(document.description),
+    hc: /\bhc\b/.test(document.englishDescription),
     protected_symbol: document.protected,
     extension: document.extension,
     image_url: syntheticImageUrl(document),
@@ -202,13 +210,22 @@ export class MeilisearchDiscoveryCatalog implements DiscoveryCatalog {
   }
 
   async listRepositories() {
-    const result = await this.search<MeilisearchRepository>(this.repositoryIndex, {
-      q: '',
-      limit: 24,
-      filter: ['active = true', 'protected = false'],
-      sort: ['name:asc'],
-    })
-    return (result.hits ?? []).map(publicRepository)
+    const repositories: MeilisearchRepository[] = []
+    let offset = 0
+    while (true) {
+      const result = await this.search<MeilisearchRepository>(this.repositoryIndex, {
+        q: '',
+        limit: PROVIDER_BATCH_SIZE,
+        offset,
+        filter: ['active = true', 'protected = false'],
+        sort: ['name:asc'],
+      })
+      const hits = result.hits ?? []
+      repositories.push(...hits)
+      if (hits.length < PROVIDER_BATCH_SIZE) break
+      offset += hits.length
+    }
+    return repositories.map(publicRepository)
   }
 
   async findRepository(repoKey: string) {
@@ -239,17 +256,35 @@ export class MeilisearchDiscoveryCatalog implements DiscoveryCatalog {
   }
 
   async randomSymbols() {
-    const countResult = await this.search<MeilisearchSymbol>(this.symbolIndex, {
-      q: '', limit: 0, filter: ['locale = "en"', 'visible = true', 'safe = true'],
+    const visibility = ['locale = "en"', 'visible = true', 'safe = true']
+    const maximum = await this.search<MeilisearchSymbol>(this.symbolIndex, {
+      q: '', limit: 1, sort: ['symbolId:desc'], filter: visibility,
     })
-    const total = countResult.estimatedTotalHits ?? countResult.totalHits ?? 0
-    if (!total) return []
-    const offset = Math.floor(this.random() * Math.max(1, total - 8))
-    const result = await this.search<MeilisearchSymbol>(this.symbolIndex, {
-      q: '', limit: 9, offset, sort: ['symbolId:asc'],
-      filter: ['locale = "en"', 'visible = true', 'safe = true'],
-    })
-    return (result.hits ?? []).map((symbol) => publicSymbol(symbol, 'en'))
+    const maximumSymbolId = maximum.hits?.[0]?.symbolId ?? 0
+    if (!maximumSymbolId) return []
+
+    const symbols = new Map<number, MeilisearchSymbol>()
+    for (let attempt = 0; attempt < 4 && symbols.size < 9; attempt += 1) {
+      const ids = new Set<number>()
+      for (let index = 0; index < 27; index += 1) {
+        const unit = Math.min(Math.max(this.random(), 0), 0.999999999)
+        const randomId = Math.floor(unit * maximumSymbolId)
+        ids.add(((randomId + attempt * 9_973 + index * 7_919) % maximumSymbolId) + 1)
+      }
+      const result = await this.search<MeilisearchSymbol>(this.symbolIndex, {
+        q: '',
+        limit: ids.size,
+        filter: [...visibility, `symbolId IN [${[...ids].join(', ')}]`],
+      })
+      for (const symbol of result.hits ?? []) symbols.set(symbol.symbolId, symbol)
+    }
+
+    const sampled = [...symbols.values()]
+    for (let index = sampled.length - 1; index > 0; index -= 1) {
+      const target = Math.floor(Math.min(Math.max(this.random(), 0), 0.999999999) * (index + 1))
+      ;[sampled[index], sampled[target]] = [sampled[target]!, sampled[index]!]
+    }
+    return sampled.slice(0, 9).map((symbol) => publicSymbol(symbol, 'en'))
   }
 
   async listRepositorySymbols(
@@ -266,16 +301,16 @@ export class MeilisearchDiscoveryCatalog implements DiscoveryCatalog {
     else if (options.hasSkin) filter.push('hasSkin = true')
     const result = await this.search<MeilisearchSymbol>(this.symbolIndex, {
       q: '',
-      limit: REPOSITORY_PAGE_SIZE,
+      limit: REPOSITORY_PAGE_SIZE + 1,
       offset: options.page * REPOSITORY_PAGE_SIZE,
       sort: ['symbolId:asc'],
       filter,
     })
-    const total = result.estimatedTotalHits ?? result.totalHits ?? 0
-    const symbols = (result.hits ?? []).map((symbol) => publicSymbol(symbol, 'en'))
-    const consumed = options.page * REPOSITORY_PAGE_SIZE + symbols.length
+    const hits = result.hits ?? []
+    const symbols = hits.slice(0, REPOSITORY_PAGE_SIZE)
+      .map((symbol) => publicSymbol(symbol, 'en'))
     let nextUrl: string | undefined
-    if (total > consumed) {
+    if (hits.length > REPOSITORY_PAGE_SIZE) {
       const params = new URLSearchParams({ page: String(options.page + 1) })
       if (options.unsafe) params.set('unsafe', '1')
       else if (options.hasSkin) params.set('has_skin', '1')
@@ -285,6 +320,7 @@ export class MeilisearchDiscoveryCatalog implements DiscoveryCatalog {
   }
 
   async searchSymbols(options: DiscoverySearchOptions): Promise<PublicSearchSymbol[]> {
+    if (options.page > MAX_SEARCH_PAGE) return []
     const repoFilter = extractFilter(options.query, 'repo')
     const favorFilter = extractFilter(repoFilter.query, 'favor')
     const query = normalize(favorFilter.query)
@@ -301,7 +337,7 @@ export class MeilisearchDiscoveryCatalog implements DiscoveryCatalog {
     while (symbolOrder.length < desired) {
       const result = await this.search<MeilisearchSymbol>(this.symbolIndex, {
         q: query,
-        limit: 1_000,
+        limit: PROVIDER_BATCH_SIZE,
         offset,
         filter,
         showRankingScore: true,
@@ -314,8 +350,7 @@ export class MeilisearchDiscoveryCatalog implements DiscoveryCatalog {
         }
       }
       offset += hits.length
-      const total = result.estimatedTotalHits ?? result.totalHits ?? offset
-      if (hits.length < 1_000 || offset >= total) break
+      if (hits.length < PROVIDER_BATCH_SIZE) break
     }
 
     const pageIds = symbolOrder.slice(options.page * SEARCH_PAGE_SIZE, desired)

@@ -123,7 +123,7 @@ export async function findPublicSymbol(
   imageOptions: PublicReadImageOptions,
 ): Promise<PublicSymbolResult> {
   const repository = await store.findRepository(repoKey)
-  if (!repository || repository.settings.protected) {
+  if (!repository || repository.settings.active === false || repository.settings.protected) {
     return { kind: 'not_found', id: repoKey }
   }
 

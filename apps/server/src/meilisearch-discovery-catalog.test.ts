@@ -6,7 +6,7 @@ function symbol(overrides: Record<string, unknown> = {}) {
   return {
     id: '1_en', symbolId: 1, symbolKey: 'symbol-0000001', repoKey: 'core-aac',
     locale: 'en', safe: true, visible: true, name: 'hello', description: 'A greeting',
-    englishName: 'hello', searchTerms: ['hello'], synonyms: ['hi'],
+    englishName: 'hello', englishDescription: 'A greeting', searchTerms: ['hello'], synonyms: ['hi'],
     keywordBoosts: [{ term: 'hello', weight: 2 }],
     imageUrl: 'https://assets.example.invalid/symbols/0000001.svg', enabled: true,
     protected: false, hasSkin: true, hasVariants: true, license: 'CC0-1.0',
@@ -40,6 +40,22 @@ describe('Meilisearch discovery catalog', () => {
     })])
     const body = JSON.parse(String(request.mock.calls[0]![1]!.body))
     expect(body.filter).toEqual(['active = true', 'protected = false'])
+    expect(body.limit).toBe(1_000)
+  })
+
+  it('fetches every public repository rather than assuming the synthetic repository count', async () => {
+    const repository = (index: number) => ({
+      repoKey: `repo-${index}`, name: `Repository ${index}`, description: '', active: true,
+      protected: false, license: null, licenseUrl: null, author: null,
+      authorUrl: null, url: null, symbolCount: 1,
+    })
+    const { value, request } = catalog([
+      { hits: Array.from({ length: 1_000 }, (_, index) => repository(index)) },
+      { hits: [repository(1_000)] },
+    ])
+    await expect(value.listRepositories()).resolves.toHaveLength(1_001)
+    const body = JSON.parse(String(request.mock.calls[1]![1]!.body))
+    expect(body.offset).toBe(1_000)
   })
 
   it('maps symbol detail and deterministic synthetic skin image URLs', async () => {
@@ -50,6 +66,15 @@ describe('Meilisearch discovery catalog', () => {
         id: 1, locale: 'en', image_url: '/api/synthetic-images/0000001-varianted-skin.svg',
         skins: true, unsafe_result: false,
       }),
+    })
+  })
+
+  it('derives hc from the English source description, not the requested localization', async () => {
+    const { value } = catalog([{ hits: [symbol({
+      description: 'Localized hc marker', englishDescription: 'A greeting',
+    })] }])
+    await expect(value.findSymbol('core-aac', 'symbol-0000001')).resolves.toMatchObject({
+      kind: 'found', symbol: { hc: false },
     })
   })
 
@@ -87,6 +112,16 @@ describe('Meilisearch discovery catalog', () => {
     expect(body.filter).toContain('(locale = "zh-CN" OR locale = "en")')
   })
 
+  it('does not treat Traditional Chinese as Simplified Chinese', async () => {
+    const { value, request } = catalog([{ hits: [symbol()] }, { hits: [] }])
+    const results = await value.searchSymbols({
+      query: 'hello', locale: 'zh-TW', safe: true, page: 0,
+    })
+    expect(results[0]?.locale).toBe('zh')
+    const body = JSON.parse(String(request.mock.calls[0]![1]!.body))
+    expect(body.filter).toContain('(locale = "zh" OR locale = "en")')
+  })
+
   it('continues fetching unique results beyond the first 1,000 localization hits', async () => {
     const firstBatch = Array.from({ length: 1_000 }, (_, index) =>
       symbol({ id: `${index + 1}_en`, symbolId: index + 1, symbolKey: `symbol-${index + 1}` }))
@@ -103,19 +138,46 @@ describe('Meilisearch discovery catalog', () => {
     expect(secondBody.offset).toBe(1_000)
   })
 
+  it('caps deep search pages before issuing provider requests', async () => {
+    const { value, request } = catalog([])
+    await expect(value.searchSymbols({ query: '', locale: 'en', safe: true, page: 100 }))
+      .resolves.toEqual([])
+    expect(request).not.toHaveBeenCalled()
+  })
+
+  it('samples random symbol IDs instead of requesting a contiguous estimated-total window', async () => {
+    const sampled = Array.from({ length: 9 }, (_, index) =>
+      symbol({ id: `${index + 1}_en`, symbolId: index + 1, symbolKey: `symbol-${index + 1}` }))
+    const { value, request } = catalog([
+      { hits: [symbol({ symbolId: 100, id: '100_en' })] },
+      { hits: sampled },
+    ])
+    await expect(value.randomSymbols()).resolves.toHaveLength(9)
+    const maximumBody = JSON.parse(String(request.mock.calls[0]![1]!.body))
+    const sampleBody = JSON.parse(String(request.mock.calls[1]![1]!.body))
+    expect(maximumBody.sort).toEqual(['symbolId:desc'])
+    expect(sampleBody.filter).toContainEqual(expect.stringContaining('symbolId IN ['))
+    expect(sampleBody.offset).toBeUndefined()
+  })
+
   it('maps repository pagination and unsafe filtering', async () => {
     const { value, request } = catalog([
       { hits: [{ repoKey: 'core-aac', name: 'Core', description: '', active: true,
         protected: false, license: null, licenseUrl: null, author: null,
         authorUrl: null, url: null, symbolCount: 70 }] },
-      { hits: [symbol({ safe: false })], estimatedTotalHits: 61 },
+      { hits: Array.from({ length: 61 }, (_, index) => symbol({
+        id: `${index + 1}_en`, symbolId: index + 1, symbolKey: `symbol-${index + 1}`,
+        safe: false,
+      })) },
     ])
     const result = await value.listRepositorySymbols('core-aac', {
       page: 0, unsafe: true, hasSkin: false,
     })
     expect(result).toMatchObject({ kind: 'found', nextUrl: expect.stringContaining('unsafe=1') })
+    if (result.kind === 'found') expect(result.symbols).toHaveLength(60)
     const body = JSON.parse(String(request.mock.calls[1]![1]!.body))
     expect(body.filter).toContain('safe = false')
+    expect(body.limit).toBe(61)
   })
 
   it('turns provider and transport failures into catalog unavailability', async () => {

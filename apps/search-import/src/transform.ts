@@ -63,6 +63,7 @@ export async function* transformDocuments(datasetDirectory: string, limit = BENC
         name: localization.name,
         description: localization.description,
         englishName: english.name,
+        englishDescription: english.description,
         searchTerms: localization.searchTerms,
         synonyms: localization.synonyms,
         keywordBoosts: Object.entries(localization.keywordBoosts).map(([term, weight]) => ({ term, weight })),
