@@ -35,8 +35,8 @@ describe('public discovery', () => {
     await expectNoAccessibilityViolations(view.container)
   })
 
-  it('renders the legacy API reference at its public route', () => {
-    renderApp('/api')
+  it('renders the legacy API reference at its public route', async () => {
+    const view = renderApp('/api')
 
     expect(screen.getByRole('heading', { name: 'Open Symbols API Documentation' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /POST.*\/api\/v2\/token/ })).toBeInTheDocument()
@@ -47,6 +47,9 @@ describe('public discovery', () => {
     expect(screen.getAllByText(/object-position/).length).toBeGreaterThan(0)
     expect(screen.getByText(/token_expired: true/)).toBeInTheDocument()
     expect(screen.getByText(/HTTP 429/)).toBeInTheDocument()
+    expect(document.querySelector('.api-introduction')).not.toBeNull()
+    expect(document.querySelectorAll('.api-runner-surface')).toHaveLength(3)
+    await expectNoAccessibilityViolations(view.container)
   })
 
   it('submits a shared-secret application without retaining applicant data', async () => {
@@ -222,8 +225,10 @@ describe('public discovery', () => {
     await expectNoAccessibilityViolations(view.container)
 
     view.unmount()
-    renderApp('/not-rebuilt')
+    const notFoundView = renderApp('/not-rebuilt')
     expect(screen.getByRole('heading', { name: 'Page not found' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Return to Open Symbols' })).toBeInTheDocument()
+    expect(document.querySelector('.not-found')).not.toBeNull()
+    await expectNoAccessibilityViolations(notFoundView.container)
   })
 })

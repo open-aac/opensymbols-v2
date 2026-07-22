@@ -40,6 +40,7 @@ import {
 } from './features/account'
 import { useAsync } from './hooks'
 import type { SymbolResult } from './types'
+import './app-pages.css'
 
 type RepositoryFilter = 'none' | 'unsafe' | 'skins'
 
