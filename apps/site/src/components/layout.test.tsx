@@ -160,7 +160,7 @@ describe('site layout', () => {
     expect(screen.getByRole('link', { name: 'by OpenAAC' })).toHaveAttribute('href', 'https://www.openaac.org')
   })
 
-  it('shows account actions without public legacy administrator entry points', () => {
+  it('shows one signed-out account icon outside primary navigation and preserves the current location', async () => {
     const auth: AppAuthValue = {
       configured: true,
       loaded: true,
@@ -170,18 +170,37 @@ describe('site layout', () => {
       signOut: async () => undefined,
     }
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/search?q=hello#results']}>
         <AppAuthProvider value={auth}>
           <SiteLayout><p>Content</p></SiteLayout>
         </AppAuthProvider>
       </MemoryRouter>,
     )
 
-    expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/sign-in')
-    expect(screen.getByRole('link', { name: 'Create account' })).toHaveAttribute('href', '/sign-up')
+    const navigation = screen.getByRole('navigation', { name: 'Primary navigation' })
+    const signIn = screen.getByRole('link', { name: 'Sign in' })
+    expect(signIn).toHaveAttribute('href', '/sign-in?redirect_url=%2Fsearch%3Fq%3Dhello%23results')
+    expect(navigation).not.toContainElement(signIn)
+    expect(within(navigation).queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Create account' })).not.toBeInTheDocument()
+    expect(signIn.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     expect(screen.queryByRole('link', { name: 'OpenAAC administrator sign in' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Admin log out' })).not.toBeInTheDocument()
+    await expectNoAccessibilityViolations(signIn.closest('header')!)
   })
+
+  it.each(['/sign-in', '/sign-in/continue', '/sign-up', '/sign-up/continue'])(
+    'hides the signed-out account icon on %s',
+    (route) => {
+      render(
+        <MemoryRouter initialEntries={[route]}>
+          <AppAuthProvider value={signedOut}><SiteLayout><p>Content</p></SiteLayout></AppAuthProvider>
+        </MemoryRouter>,
+      )
+
+      expect(screen.queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument()
+    },
+  )
 
   it('does not inspect or refresh legacy administrator tokens', () => {
     const fetch = vi.fn()
@@ -214,12 +233,13 @@ describe('site layout', () => {
     )
 
     expect(screen.getByRole('button', { name: 'Open account menu' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Demo Person' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument()
     expect(window.localStorage.getItem('clerk-session-token')).toBeNull()
   })
 
-  it('opens an accessible mobile navigation dialog with signed-out actions', async () => {
+  it('opens an accessible mobile navigation dialog without signed-out actions', async () => {
     stubMobileViewport()
     mockDialog()
     const user = userEvent.setup()
@@ -232,6 +252,8 @@ describe('site layout', () => {
     )
 
     const trigger = screen.getByRole('button', { name: 'Menu' })
+    const signIn = screen.getByRole('link', { name: 'Sign in' })
+    expect(signIn).toHaveAttribute('href', '/sign-in?redirect_url=%2F')
     expect(trigger).toHaveAttribute('aria-haspopup', 'dialog')
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('navigation', { name: 'Primary navigation' })).not.toBeInTheDocument()
@@ -243,8 +265,9 @@ describe('site layout', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'true')
     expect(within(navigation).getByRole('link', { name: 'Search symbols' })).toHaveAttribute('href', '/search')
     expect(within(navigation).getByRole('link', { name: 'API documentation' })).toHaveAttribute('href', '/api')
-    expect(within(navigation).getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/sign-in')
-    expect(within(navigation).getByRole('link', { name: 'Create account' })).toHaveAttribute('href', '/sign-up')
+    expect(within(navigation).queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument()
+    expect(within(navigation).queryByRole('link', { name: 'Create account' })).not.toBeInTheDocument()
+    expect(navigation).not.toContainElement(signIn)
     expect(screen.getByRole('button', { name: 'Close menu' })).toHaveFocus()
     expect(document.documentElement.style.overflow).toBe('hidden')
     await expectNoAccessibilityViolations(view.container)
@@ -324,7 +347,7 @@ describe('site layout', () => {
   it.each([
     ['loading', { ...signedOut, loaded: false }],
     ['unconfigured', { ...signedOut, configured: false }],
-  ] as const)('does not expose unavailable account actions while authentication is %s', async (_state, auth) => {
+  ] as const)('does not expose unavailable account actions while authentication is %s', async (state, auth) => {
     stubMobileViewport()
     mockDialog()
     const user = userEvent.setup()
@@ -338,5 +361,7 @@ describe('site layout', () => {
     expect(within(navigation).queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument()
     expect(within(navigation).queryByRole('link', { name: 'Create account' })).not.toBeInTheDocument()
     expect(within(navigation).queryByRole('link', { name: 'Your account' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument()
+    expect(document.querySelectorAll('.header-account-slot')).toHaveLength(state === 'loading' ? 1 : 0)
   })
 })
