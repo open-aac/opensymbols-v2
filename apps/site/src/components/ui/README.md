@@ -24,6 +24,15 @@ import { Button, FormActions, Surface, TextField } from '../components/ui'
 - `EmptyState` describes absent content. Only pass an action when it genuinely works; coming-soon areas must not imply that saving is available.
 - `DescriptionList` is for term/value metadata, not general two-column layout.
 
-## Styling and accessibility
+## Tailwind conventions
 
-Components use the global cream, white, and teal tokens and accept `className` for feature-level layout adjustments. Keep product composition and one-off navigation in feature CSS. Interactive targets are at least 44px, focus remains visible, and shared surfaces support forced colours. Avoid adding motion without an equivalent reduced-motion rule.
+The site uses Tailwind v4 as a hybrid system:
+
+- Design tokens live in the CSS-first `@theme` block in `styles.css`. Use those named colour, type, spacing, and radius values instead of introducing one-off equivalents.
+- Shared accessible primitives keep stable semantic class names and centralized rules in `@layer components`. Do not move focus treatment, target sizing, field states, or forced-colour behavior into page markup.
+- Page-specific composition may use static Tailwind utilities. Keep utility strings short, literal, and local; do not construct class names dynamically or use `@apply`.
+- Complex responsive grids, native-dialog behavior, and feature states belong in a small feature stylesheet with the explicit layer order `theme, base, components, utilities`.
+- Borders establish hierarchy. Shadows are reserved for the sticky header and open mobile sidecar.
+- The `800px` mobile-navigation breakpoint must remain identical in CSS and TypeScript.
+
+Components accept `className` for feature-level composition without changing their APIs. Interactive targets are at least 44px, focus uses the shared 3px treatment with surface separation, and shared surfaces support forced colours. Avoid adding motion without an equivalent reduced-motion rule.

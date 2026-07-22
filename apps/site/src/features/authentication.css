@@ -1,18 +1,33 @@
-.auth-page {
-  max-width: 44rem;
-}
+@layer theme, base, components, utilities;
 
-.auth-page > p:not(.eyebrow) {
-  max-width: 40rem;
-  color: var(--color-text-muted);
-}
+@layer components {
+  .auth-page {
+    max-width: 44rem;
+    margin-block: var(--space-7);
+    padding: var(--space-7);
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-md);
+  }
+  .auth-page > .eyebrow, .auth-page > h1 { margin-top: 0; }
+  .auth-page > p:not(.eyebrow) {
+    max-width: 40rem;
+    color: var(--color-text-muted);
+  }
+  .auth-component {
+    display: flex;
+    justify-content: center;
+    margin-top: var(--space-6);
+    padding-top: var(--space-6);
+    border-top: 2px solid var(--color-border);
+  }
+  .auth-component > * { width: 100%; min-width: 0; max-width: 100%; }
 
-.auth-component {
-  display: flex;
-  justify-content: center;
-  margin-top: var(--space-6);
-}
+  @media (max-width: 480px) {
+    .auth-page { margin-block: var(--space-5); padding: var(--space-3); }
+  }
 
-.auth-component > * {
-  max-width: 100%;
+  @media (forced-colors: active) {
+    .auth-page, .auth-component { border-color: CanvasText; }
+  }
 }

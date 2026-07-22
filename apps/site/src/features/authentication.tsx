@@ -109,16 +109,36 @@ function AuthenticationUnavailable() {
 
 const clerkAppearance = {
   variables: {
-    colorPrimary: '#087f73',
-    colorText: '#17242b',
-    colorBackground: '#ffffff',
-    borderRadius: '0.75rem',
-    fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    colorPrimary: 'var(--color-action)',
+    colorText: 'var(--color-text)',
+    colorTextSecondary: 'var(--color-text-muted)',
+    colorBackground: 'var(--color-surface)',
+    colorInputBackground: 'var(--color-surface)',
+    colorInputText: 'var(--color-text)',
+    borderRadius: 'var(--radius-sm)',
+    fontFamily: 'var(--font-sans)',
   },
   elements: {
-    formButtonPrimary: { minHeight: '44px' },
-    formFieldInput: { minHeight: '44px' },
-    footerActionLink: { minHeight: '44px', display: 'inline-flex', alignItems: 'center' },
+    rootBox: { width: '100%', maxWidth: '100%', minWidth: '0' },
+    cardBox: { width: '100%', maxWidth: '100%', minWidth: '0' },
+    card: {
+      width: '100%',
+      maxWidth: '100%',
+      minWidth: '0',
+      background: 'var(--color-surface)',
+      border: '2px solid var(--color-border)',
+      borderRadius: 'var(--radius-md)',
+      boxShadow: 'none',
+    },
+    formButtonPrimary: { minHeight: '44px', background: 'var(--color-action)' },
+    formFieldInput: { minHeight: '44px', border: '2px solid var(--color-border)' },
+    footerActionLink: {
+      minHeight: '44px',
+      display: 'inline-flex',
+      alignItems: 'center',
+      color: 'var(--color-action)',
+      fontWeight: '700',
+    },
   },
 } as const
 
