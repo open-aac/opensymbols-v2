@@ -13,9 +13,9 @@
     border-radius: var(--radius-md);
   }
   .account-profile h1, .account-profile .eyebrow, .account-profile__email { margin: 0; }
-  .account-profile .eyebrow { margin-bottom: var(--space-1); }
+  .account-profile .eyebrow { margin-bottom: var(--space-2); }
   .account-profile__email {
-    margin-top: var(--space-1);
+    margin-top: var(--space-3);
     color: var(--color-text-muted);
     overflow-wrap: anywhere;
   }
@@ -126,7 +126,7 @@
   .account-settings-card__identity .account-profile__avatar { width: 4rem; height: 4rem; }
   .account-settings-card__identity h3, .account-settings-card__identity p { margin: 0; }
   .account-settings-card__identity p {
-    margin-top: var(--space-1);
+    margin-top: var(--space-3);
     color: var(--color-text-muted);
     overflow-wrap: anywhere;
   }

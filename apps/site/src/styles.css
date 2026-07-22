@@ -64,6 +64,8 @@
   a { color: var(--color-action); text-decoration-thickness: 0.1em; text-underline-offset: 0.18em; }
   a:hover { color: var(--color-action-hover); }
   h1, h2, h3 { line-height: 1.15; text-wrap: balance; }
+  h1, h2 { margin-block-end: var(--space-5); }
+  h3 { margin-block-end: var(--space-4); }
   p { text-wrap: pretty; }
 
   :where(a, button, input, select, textarea):focus-visible {
