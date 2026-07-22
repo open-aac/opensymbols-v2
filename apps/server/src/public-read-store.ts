@@ -1,5 +1,5 @@
 import { Pool, type QueryResultRow } from 'pg'
-import { decodeGoSecure, GoSecureDecodeError } from './go-secure.js'
+import { decodeGoSecure, encodeGoSecure, GoSecureDecodeError } from './go-secure.js'
 import type {
   JsonValue,
   RepositoryRecord,
@@ -23,8 +23,17 @@ interface SymbolDatabaseRow extends QueryResultRow {
   settings: string | null
 }
 
-export interface DatabaseClient {
+interface SymbolRequestDatabaseRow extends QueryResultRow {
+  id: number
+  settings: string | null
+}
+
+export interface DatabaseSession {
   query<Row extends QueryResultRow>(text: string, values?: unknown[]): Promise<{ rows: Row[] }>
+}
+
+export interface DatabaseClient extends DatabaseSession {
+  transaction<Result>(work: (session: DatabaseSession) => Promise<Result>): Promise<Result>
 }
 
 export interface PublicReadStore {
@@ -32,6 +41,12 @@ export interface PublicReadStore {
   findRepository(repoKey: string): Promise<RepositoryRecord | null>
   findSymbol(repoKey: string, symbolKey: string): Promise<SymbolRecord | null>
   close(): Promise<void>
+}
+
+export interface PublicDiscoveryStore extends PublicReadStore {
+  listSymbols(): Promise<SymbolRecord[]>
+  listRepositorySymbols(repoKey: string): Promise<SymbolRecord[]>
+  addSymbolRequest(phrase: string, comment: string, createdAt: string): Promise<void>
 }
 
 export interface PostgresPublicReadStoreOptions {
@@ -48,7 +63,7 @@ function settingsObject(value: string | null, encryptionKey: string | undefined)
   return decoded as { [key: string]: JsonValue }
 }
 
-export class PostgresPublicReadStore implements PublicReadStore {
+export class PostgresPublicReadStore implements PublicDiscoveryStore {
   constructor(
     private readonly database: DatabaseClient,
     private readonly encryptionKey?: string,
@@ -82,15 +97,66 @@ export class PostgresPublicReadStore implements PublicReadStore {
     const row = result.rows[0]
     if (!row) return null
 
-    return {
-      id: row.id,
-      repoKey: row.repo_key,
-      symbolKey: row.symbol_key,
-      enabled: row.enabled,
-      hasSkin: row.has_skin,
-      unsafeResult: row.unsafe_result,
-      settings: settingsObject(row.settings, this.encryptionKey) as SymbolSettings,
-    }
+    return this.symbolRecord(row)
+  }
+
+  async listSymbols() {
+    const result = await this.database.query<SymbolDatabaseRow>(
+      `SELECT id, repo_key, symbol_key, enabled, has_skin, unsafe_result, settings
+       FROM picture_symbols
+       ORDER BY id`,
+    )
+    return result.rows.map((row) => this.symbolRecord(row))
+  }
+
+  async listRepositorySymbols(repoKey: string) {
+    const result = await this.database.query<SymbolDatabaseRow>(
+      `SELECT id, repo_key, symbol_key, enabled, has_skin, unsafe_result, settings
+       FROM picture_symbols
+       WHERE repo_key = $1
+       ORDER BY id`,
+      [repoKey],
+    )
+    return result.rows.map((row) => this.symbolRecord(row))
+  }
+
+  async addSymbolRequest(phrase: string, comment: string, createdAt: string) {
+    await this.database.transaction(async (session) => {
+      await session.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`en:${phrase}`])
+      const result = await session.query<SymbolRequestDatabaseRow>(
+        `SELECT id, settings
+         FROM symbol_requests
+         WHERE phrase = $1 AND locale = 'en'
+         ORDER BY id
+         LIMIT 1
+         FOR UPDATE`,
+        [phrase],
+      )
+      const existing = result.rows[0]
+      const decoded = existing
+        ? settingsObject(existing.settings, this.encryptionKey)
+        : {}
+      const comments = Array.isArray(decoded.comments) ? [...decoded.comments] : []
+      comments.push({ user_id: null, text: comment, timestamp: createdAt })
+      const settings = encodeGoSecure(
+        { ...decoded, comments, n_votes: comments.length },
+        this.encryptionKey,
+      )
+
+      if (existing) {
+        await session.query('UPDATE symbol_requests SET settings = $1, updated_at = $2 WHERE id = $3', [
+          settings,
+          createdAt,
+          existing.id,
+        ])
+      } else {
+        await session.query(
+          `INSERT INTO symbol_requests (phrase, locale, settings, created_at, updated_at)
+           VALUES ($1, 'en', $2, $3, $3)`,
+          [phrase, settings, createdAt],
+        )
+      }
+    })
   }
 
   close() {
@@ -103,6 +169,18 @@ export class PostgresPublicReadStore implements PublicReadStore {
       settings: settingsObject(row.settings, this.encryptionKey) as RepositorySettings,
     }
   }
+
+  private symbolRecord(row: SymbolDatabaseRow): SymbolRecord {
+    return {
+      id: row.id,
+      repoKey: row.repo_key,
+      symbolKey: row.symbol_key,
+      enabled: row.enabled,
+      hasSkin: row.has_skin,
+      unsafeResult: row.unsafe_result,
+      settings: settingsObject(row.settings, this.encryptionKey) as SymbolSettings,
+    }
+  }
 }
 
 export function createPostgresPublicReadStore(options: PostgresPublicReadStoreOptions) {
@@ -111,6 +189,25 @@ export function createPostgresPublicReadStore(options: PostgresPublicReadStoreOp
     async query<Row extends QueryResultRow>(text: string, values?: unknown[]) {
       const result = await pool.query<Row>(text, values)
       return { rows: result.rows }
+    },
+    async transaction<Result>(work: (session: DatabaseSession) => Promise<Result>) {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const result = await work({
+          async query<Row extends QueryResultRow>(text: string, values?: unknown[]) {
+            const queryResult = await client.query<Row>(text, values)
+            return { rows: queryResult.rows }
+          },
+        })
+        await client.query('COMMIT')
+        return result
+      } catch (error) {
+        await client.query('ROLLBACK')
+        throw error
+      } finally {
+        client.release()
+      }
     },
   }
   return new PostgresPublicReadStore(database, options.encryptionKey, () => pool.end())
