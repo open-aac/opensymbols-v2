@@ -1,0 +1,11 @@
+{
+  "preset": "relevance",
+  "seed": 42,
+  "counts": {"repositories":24,"symbols":200,"localizations":1200,"judgments":150},
+  "hashes": {
+    "repositories":"4ac72a5666277c8c5a779ca29fb1abdee51a586edca4f71c80819e782aea0b4d",
+    "symbols":"e924aac2c4c4f3f0b455ca9ba7045b08a0c5b74f1ecf657c38358c724c9a3111",
+    "localizations":"0ed3cd78177aaf4824450dc8a372938fb2bdb0a569d01f8005805290c9175b2f",
+    "judgments":"1791fa7318bedd5476d9a844d226b02e0228fed81e0d13369980c8f2388ef00e"
+  }
+}

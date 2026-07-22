@@ -10,6 +10,8 @@
   "scripts": {
     "dev": "pnpm legacy:up && pnpm dev:apps",
     "dev:apps": "pnpm --parallel --stream --filter @opensymbols/site --filter @opensymbols/server dev",
+    "data:generate": "pnpm --filter @opensymbols/server data:generate",
+    "data:scale": "pnpm --filter @opensymbols/server data:scale",
     "legacy:up": "docker compose up -d --build --wait postgres legacy-server",
     "legacy:seed": "pnpm legacy:up && docker compose exec legacy-server bundle exec rails db:seed",
     "legacy:down": "docker compose down",
