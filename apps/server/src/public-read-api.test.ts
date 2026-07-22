@@ -213,27 +213,27 @@ describe('public-read ownership boundaries', () => {
     ['/api/v2/repositories', { headers: { Authorization: 'invalid-token' } }],
     ['/api/v2/repositories/demo?access_token=invalid-token', {}],
     ['/api/v2/symbols/demo/hello?search_token=invalid-token', {}],
-  ] as const)('proxies credential-bearing read %s to Rails', async (path, init) => {
+  ] as const)('keeps credential-bearing public read %s in Hono', async (path, init) => {
     const app = createApp({ publicReadStore: contractStore(), legacyServerUrl: upstreamUrl })
     const response = await app.request(path, init)
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({ owner: 'rails' })
+    expect(response.headers.get('x-owner')).toBeNull()
   })
 
-  it('leaves other methods and API routes with Rails', async () => {
+  it('rejects removed methods while retaining the token proxy', async () => {
     const app = createApp({ publicReadStore: contractStore(), legacyServerUrl: upstreamUrl })
     const post = await app.request('/api/v2/repositories', { method: 'POST' })
-    const head = await app.request('/api/v2/repositories', { method: 'HEAD' })
     const other = await app.request('/api/v2/token', { method: 'POST' })
-    await expect(post.json()).resolves.toMatchObject({ owner: 'rails', method: 'POST' })
-    expect(head.headers.get('x-owner')).toBe('rails')
+    expect(post.status).toBe(404)
+    await expect(post.json()).resolves.toEqual({ error: 'not_found' })
     await expect(other.json()).resolves.toMatchObject({ owner: 'rails', url: '/api/v2/token' })
   })
 
-  it('keeps exact reads with Rails when no store is injected', async () => {
+  it('does not return public reads to Rails when no store is injected', async () => {
     const app = createApp({ legacyServerUrl: upstreamUrl })
     const response = await app.request('/api/v2/repositories')
-    await expect(response.json()).resolves.toMatchObject({ owner: 'rails' })
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toEqual({ error: 'not_found' })
   })
 
   it.each([

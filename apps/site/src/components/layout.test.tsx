@@ -1,9 +1,7 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { http, HttpResponse } from 'msw'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { expectNoAccessibilityViolations } from '../test/axe'
-import { server } from '../test/server'
 import { AppAuthProvider, type AppAuthValue } from '../features/authentication'
 import { SiteLayout } from './layout'
 
@@ -28,7 +26,6 @@ class HeaderResizeObserver {
 afterEach(() => {
   vi.unstubAllGlobals()
   document.documentElement.style.removeProperty('--site-header-height')
-  document.cookie = 'auth=;path=/;max-age=0;SameSite=Lax'
 })
 
 describe('site layout', () => {
@@ -117,21 +114,15 @@ describe('site layout', () => {
     expect(screen.queryByRole('button', { name: 'Admin log out' })).not.toBeInTheDocument()
   })
 
-  it('refreshes the legacy session bridge without rendering administrator controls', async () => {
-    server.use(http.get('/api/v1/token_check', () => HttpResponse.json({
-      valid: true,
-      user_name: 'Demo Admin',
-      refresh_token: 'refreshed-legacy-token',
-    })))
+  it('does not inspect or refresh legacy administrator tokens', () => {
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
     window.localStorage.setItem('auth_token', 'legacy-token')
 
     render(<MemoryRouter><SiteLayout><p>Content</p></SiteLayout></MemoryRouter>)
 
-    await waitFor(() => expect(window.localStorage.getItem('auth_token')).toBe('refreshed-legacy-token'))
-    expect(document.cookie).toContain('auth=refreshed-legacy-token')
-    expect(screen.queryByRole('link', { name: 'Admin: Demo Admin' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Admin log out' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'OpenAAC administrator sign in' })).not.toBeInTheDocument()
+    expect(fetch).not.toHaveBeenCalled()
+    expect(window.localStorage.getItem('auth_token')).toBe('legacy-token')
   })
 
   it('shows the Clerk account control for a signed-in person without exposing a token', () => {

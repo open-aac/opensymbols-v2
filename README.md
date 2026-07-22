@@ -99,13 +99,12 @@ and `127.0.0.1`. Restart `pnpm dev` after changing `.env`.
 The React site owns `/sign-in/*`, `/sign-up/*`, and `/account`. Hono verifies
 short-lived Clerk bearer tokens at `/api/app/session`; it never accepts a Clerk
 secret key. Clerk's browser SDK manages its own session and this application
-does not copy Clerk tokens into local storage, session storage, URLs, logs, or
-the legacy Rails authentication cookie.
+does not copy Clerk tokens into local storage, session storage, URLs, or logs.
 
-The existing `/login` and `/admin` routes remain the separate legacy OpenAAC
-administrator flow. No Clerk-to-Rails user record synchronization, database
-user table, webhook, roles, saved characters, symbol packs, or personalization
-is included yet.
+The obsolete Rails administrator sign-in, session bridge, and public admin
+routes have been removed. Clerk-backed administrator authorization and tools
+are tracked separately. No database user table, webhook, roles, saved
+characters, symbol packs, or personalization is included yet.
 
 ## Verify
 

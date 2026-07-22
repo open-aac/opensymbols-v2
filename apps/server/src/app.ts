@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { Hono, type Context } from 'hono'
+import { Hono } from 'hono'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { createLegacyProxy } from './legacy-proxy.js'
 import {
@@ -19,19 +19,6 @@ export interface AppOptions {
   s3Cdn?: string
   siteRoot?: string
   appSessionVerifier?: AppSessionVerifier
-}
-
-function hasLegacyCredentials(context: Context) {
-  const url = new URL(context.req.url)
-  return context.req.raw.headers.has('authorization') ||
-    url.searchParams.has('access_token') ||
-    url.searchParams.has('search_token')
-}
-
-function isPublicReadPath(path: string) {
-  return path === '/api/v2/repositories' ||
-    /^\/api\/v2\/repositories\/[^/]+$/.test(path) ||
-    /^\/api\/v2\/symbols\/[^/]+\/[^/]+$/.test(path)
 }
 
 function legacyTimeoutFromEnvironment() {
@@ -78,15 +65,7 @@ export function createApp(options: AppOptions = {}) {
       s3Cdn: options.s3Cdn,
     }
 
-    app.use('/api/v2/*', (context, next) => {
-      if (context.req.method !== 'GET' && isPublicReadPath(context.req.path)) {
-        return legacyProxy(context)
-      }
-      return next()
-    })
-
     app.get('/api/v2/repositories', async (context) => {
-      if (hasLegacyCredentials(context)) return legacyProxy(context)
       try {
         return context.json({ repositories: await listPublicRepositories(store) })
       } catch {
@@ -95,7 +74,6 @@ export function createApp(options: AppOptions = {}) {
     })
 
     app.get('/api/v2/repositories/:repoKey', async (context) => {
-      if (hasLegacyCredentials(context)) return legacyProxy(context)
       try {
         const repoKey = context.req.param('repoKey')
         const repository = await findPublicRepository(store, repoKey)
@@ -107,7 +85,6 @@ export function createApp(options: AppOptions = {}) {
     })
 
     app.get('/api/v2/symbols/:repoKey/:symbolKey', async (context) => {
-      if (hasLegacyCredentials(context)) return legacyProxy(context)
       try {
         const result = await findPublicSymbol(
           store,
@@ -125,13 +102,13 @@ export function createApp(options: AppOptions = {}) {
     })
   }
 
-  app.all('/api/v1/*', legacyProxy)
-  app.all('/api/v2/*', legacyProxy)
-  app.all('/auth/coughdrop/*', legacyProxy)
-  app.all('/login', legacyProxy)
-  app.all('/admin', legacyProxy)
-  app.all('/admin/*', legacyProxy)
-  app.all('/stats', legacyProxy)
+  app.get('/api/v1/repositories/:repoKey/symbols', legacyProxy)
+  app.get('/api/v1/symbols/search', legacyProxy)
+  app.get('/api/v1/symbols/random', legacyProxy)
+  app.post('/api/v1/symbols/requests', legacyProxy)
+  app.post('/api/v2/generate_secret', legacyProxy)
+  app.post('/api/v2/token', legacyProxy)
+  app.get('/api/v2/symbols', legacyProxy)
 
   app.all('/api/*', (context, next) => {
     if (context.req.path === '/api') return next()

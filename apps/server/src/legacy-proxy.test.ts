@@ -8,15 +8,10 @@ let upstreamUrl: string
 
 beforeAll(async () => {
   upstream = createServer((request, response) => {
-    if (request.url?.startsWith('/api/v1/slow')) {
+    if (request.url?.includes('slow=1')) {
       setTimeout(() => {
         response.writeHead(200).end('late')
       }, 100)
-      return
-    }
-
-    if (request.url?.startsWith('/api/v2/redirect')) {
-      response.writeHead(307, { location: '/login' }).end()
       return
     }
 
@@ -59,7 +54,7 @@ afterAll(async () => {
 describe('legacy route gateway', () => {
   it('preserves the request and upstream response', async () => {
     const app = createApp({ legacyServerUrl: upstreamUrl })
-    const response = await app.request('/api/v1/echo?locale=en', {
+    const response = await app.request('/api/v1/symbols/requests', {
       method: 'POST',
       headers: {
         authorization: 'Bearer example',
@@ -74,7 +69,7 @@ describe('legacy route gateway', () => {
     expect(response.headers.get('x-legacy-response')).toBe('preserved')
     await expect(response.json()).resolves.toMatchObject({
       method: 'POST',
-      url: '/api/v1/echo?locale=en',
+      url: '/api/v1/symbols/requests',
       body: '{"phrase":"hello"}',
       authorization: 'Bearer example',
       cookie: 'auth=secret',
@@ -93,27 +88,40 @@ describe('legacy route gateway', () => {
     })
   })
 
-  it('returns upstream redirects without following them', async () => {
+  it.each([
+    ['GET', '/api/v1/repositories/demo/symbols'],
+    ['GET', '/api/v1/symbols/search?q=hello'],
+    ['GET', '/api/v1/symbols/random'],
+    ['POST', '/api/v1/symbols/requests'],
+    ['POST', '/api/v2/generate_secret'],
+    ['POST', '/api/v2/token'],
+    ['GET', '/api/v2/symbols?q=hello'],
+  ])('forwards retained %s route %s', async (method, path) => {
     const app = createApp({ legacyServerUrl: upstreamUrl })
-    const response = await app.request('/api/v2/redirect')
+    const response = await app.request(path, { method })
 
-    expect(response.status).toBe(307)
-    expect(response.headers.get('location')).toBe('/login')
+    expect(response.status).toBe(201)
   })
 
   it.each([
     '/api/v1/token_check',
-    '/api/v2/repositories',
+    '/api/v1/symbols/proxy',
+    '/api/v1/symbols/data_proxy',
+    '/api/v1/symbols/requests',
+    '/api/v2/requests',
     '/auth/coughdrop/example',
     '/login',
     '/admin',
     '/admin/repositories/demo',
     '/stats',
-  ])('forwards approved legacy route %s', async (path) => {
+  ])('does not forward removed route %s', async (path) => {
     const app = createApp({ legacyServerUrl: upstreamUrl })
     const response = await app.request(path)
 
-    expect(response.status).toBe(201)
+    expect(response.status).toBe(404)
+    if (path.startsWith('/api/')) {
+      await expect(response.json()).resolves.toEqual({ error: 'not_found' })
+    }
   })
 
   it('returns a stable timeout response', async () => {
@@ -121,7 +129,7 @@ describe('legacy route gateway', () => {
       legacyServerUrl: upstreamUrl,
       legacyServerTimeoutMs: 10,
     })
-    const response = await app.request('/api/v1/slow')
+    const response = await app.request('/api/v1/symbols/search?slow=1')
 
     expect(response.status).toBe(504)
     await expect(response.json()).resolves.toEqual({
@@ -134,7 +142,7 @@ describe('legacy route gateway', () => {
       legacyServerUrl: 'http://127.0.0.1:1',
       legacyServerTimeoutMs: 100,
     })
-    const response = await app.request('/api/v1/repositories')
+    const response = await app.request('/api/v1/symbols/random')
 
     expect(response.status).toBe(502)
     await expect(response.json()).resolves.toEqual({

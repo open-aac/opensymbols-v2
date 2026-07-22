@@ -18,10 +18,6 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         '/api/': serverTarget,
-        '/admin': serverTarget,
-        '/auth': serverTarget,
-        '/login': serverTarget,
-        '/stats': serverTarget,
       },
     },
     test: {

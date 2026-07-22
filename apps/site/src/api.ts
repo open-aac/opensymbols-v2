@@ -1,4 +1,4 @@
-import type { PaginatedSymbols, Repository, SessionInfo, SymbolResult } from './types'
+import type { PaginatedSymbols, Repository, SymbolResult } from './types'
 
 const MAX_INTERACTIVE_RESPONSE_LENGTH = 8_000
 
@@ -28,17 +28,11 @@ export class ApiError extends Error {
   }
 }
 
-function authToken() {
-  return window.localStorage.getItem('auth_token') || ''
-}
-
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const token = authToken()
   const response = await fetch(url, {
     ...init,
     headers: {
       Accept: 'application/json',
-      ...(token ? { Authorization: token } : {}),
       ...init.headers,
     },
   })
@@ -119,10 +113,6 @@ export function getRepositorySymbols(
   return request<PaginatedSymbols>(
     `/api/v1/repositories/${encodeURIComponent(repoKey)}/symbols${suffix}`,
   )
-}
-
-export function checkSession(token: string) {
-  return request<SessionInfo>(`/api/v1/token_check?token=${encodeURIComponent(token)}`)
 }
 
 export function submitSymbolRequest(data: {
