@@ -31,7 +31,7 @@ function SearchForm({ query }: { query: string }) {
   }
 
   return (
-    <form className="discovery-search" role="search" onSubmit={submit}>
+    <form className="discovery-search bg-surface border-border rounded-md" role="search" onSubmit={submit}>
       <TextField
         id="symbol-search"
         label="Search symbols"
