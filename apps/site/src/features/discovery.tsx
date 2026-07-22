@@ -122,7 +122,7 @@ export function DiscoveryPage() {
                 : `${resultCount} ${resultCount === 1 ? 'symbol' : 'symbols'} found`}
           </p>
         </header>
-        <SearchForm key={query} query={query} />
+        <SearchForm key={`search-${query}`} query={query} />
         <PageState loading={results.loading} error={results.error} onRetry={results.retry} loadingLabel="Searching for symbols…">
           {resultCount ? (
             <ResponsiveGrid className="symbol-grid">
@@ -132,7 +132,7 @@ export function DiscoveryPage() {
             <EmptyState heading="No matching symbols" description="Try a broader word, a synonym, or make a request below." />
           )}
         </PageState>
-        <SymbolRequest key={query} query={query} />
+        <SymbolRequest key={`request-${query}`} query={query} />
       </PageContainer>
     )
   }

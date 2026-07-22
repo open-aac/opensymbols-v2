@@ -123,6 +123,37 @@ never replaced unless `--force` is supplied and its manifest identifies it as
 generator-owned. `pnpm data:scale` runs the explicit one-million-symbol scale
 generation and reports duration, output size, and peak memory.
 
+### Try discovery with Meilisearch
+
+The discovery API has a provider-neutral catalog. PostgreSQL is the default;
+set `DISCOVERY_PROVIDER=meilisearch` to run the real React discovery pages
+against a Meilisearch index without changing their URLs or response shapes.
+
+Prepare and import the deterministic 100,000-localization dataset:
+
+```sh
+pnpm search:prepare
+pnpm search:import
+pnpm search:verify
+```
+
+The importer reads `MEILISEARCH_HOST` and an admin-only
+`MEILISEARCH_API_KEY` from the ignored `.env.benchmark`. Runtime reads use a
+separate search-only key in the ignored `.env`:
+
+```text
+DISCOVERY_PROVIDER=meilisearch
+MEILISEARCH_HOST=https://your-project.meilisearch.io
+MEILISEARCH_SEARCH_API_KEY=your-search-only-key
+```
+
+Start PostgreSQL and the site with `pnpm dev`; PostgreSQL remains responsible
+for symbol-request and public-API credential writes. The synthetic dataset's
+fake asset URLs are served as deterministic same-origin SVGs by Hono. Import
+checkpoints and generated datasets stay under `.benchmark-data` and are not
+committed. Keyword search is intentionally the only Meilisearch mode in this
+iteration; semantic and hybrid search are tracked separately.
+
 ## Verify
 
 ```sh

@@ -12,6 +12,23 @@ describe('GET /api/health', () => {
   })
 })
 
+describe('synthetic symbol images', () => {
+  it('serves deterministic immutable SVGs and supported skin tones', async () => {
+    const first = await app.request('/api/synthetic-images/0000001.svg')
+    const repeated = await app.request('/api/synthetic-images/0000001.svg')
+    const tone = await app.request('/api/synthetic-images/0000001-variant-medium-dark.svg')
+    expect(first.status).toBe(200)
+    expect(first.headers.get('content-type')).toContain('image/svg+xml')
+    expect(first.headers.get('cache-control')).toContain('immutable')
+    expect(await first.text()).toBe(await repeated.text())
+    expect(await tone.text()).toContain('#7a4930')
+  })
+
+  it('rejects malformed synthetic image specifications', async () => {
+    expect((await app.request('/api/synthetic-images/not-a-symbol.svg')).status).toBe(404)
+  })
+})
+
 describe('Clerk-authenticated application API', () => {
   it('reports missing local Clerk configuration without affecting health', async () => {
     const response = await app.request('/api/app/session')

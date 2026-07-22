@@ -4,6 +4,7 @@ import { createApp } from './app.js'
 import { databaseUrlFromEnvironment } from './database-config.js'
 import { createPostgresPublicReadStore } from './public-read-store.js'
 import { clerkSessionVerifierFromEnvironment } from './clerk-auth.js'
+import { discoveryCatalogFromEnvironment } from './discovery-config.js'
 
 const port = Number.parseInt(process.env.PORT ?? '3000', 10)
 const siteRoot = process.env.SITE_DIST_PATH ?? fileURLToPath(new URL('../../site/dist', import.meta.url))
@@ -11,14 +12,16 @@ const publicReadStore = createPostgresPublicReadStore({
   connectionString: databaseUrlFromEnvironment(),
   encryptionKey: process.env.SECURE_ENCRYPTION_KEY,
 })
+const imageOptions = { s3Bucket: process.env.S3_BUCKET, s3Cdn: process.env.S3_CDN }
+const discoveryCatalog = discoveryCatalogFromEnvironment(publicReadStore, imageOptions)
 const app = createApp({
   siteRoot,
   publicReadStore,
-  publicDiscoveryStore: publicReadStore,
+  discoveryCatalog,
+  symbolRequestStore: publicReadStore,
   publicApiStore: publicReadStore,
   publicApiEncryptionKey: process.env.SECURE_ENCRYPTION_KEY,
-  s3Bucket: process.env.S3_BUCKET,
-  s3Cdn: process.env.S3_CDN,
+  ...imageOptions,
   appSessionVerifier: clerkSessionVerifierFromEnvironment(),
 })
 
@@ -38,6 +41,7 @@ function shutdown(signal: string) {
   console.log(`Received ${signal}; shutting down`)
   server.close(async (error) => {
     try {
+      await discoveryCatalog.close()
       await publicReadStore.close()
     } catch (databaseError) {
       console.error(databaseError)

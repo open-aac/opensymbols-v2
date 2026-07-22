@@ -8,8 +8,6 @@ import {
   type PublicReadImageOptions,
 } from './public-read-api.js'
 import {
-  listPublicRepositorySymbols,
-  randomPublicSymbols,
   searchPublicSymbols,
   submitPublicSymbolRequest,
 } from './public-discovery-api.js'
@@ -24,12 +22,16 @@ import {
   type PublicApiNonce,
 } from './public-api-auth.js'
 import type { AppSessionVerifier } from './clerk-auth.js'
+import type { DiscoveryCatalog } from './discovery-catalog.js'
+import { PostgresDiscoveryCatalog } from './discovery-catalog.js'
 
 export interface AppOptions {
   legacyServerUrl?: string
   legacyServerTimeoutMs?: number
   publicReadStore?: PublicReadStore
   publicDiscoveryStore?: PublicDiscoveryStore
+  discoveryCatalog?: DiscoveryCatalog
+  symbolRequestStore?: PublicDiscoveryStore
   publicApiStore?: PublicApiStore
   publicApiEncryptionKey?: string
   publicApiNow?: () => Date
@@ -42,6 +44,15 @@ export interface AppOptions {
 
 export function createApp(options: AppOptions = {}) {
   const app = new Hono()
+  const imageOptions: PublicReadImageOptions = {
+    s3Bucket: options.s3Bucket,
+    s3Cdn: options.s3Cdn,
+  }
+  const catalogStore = options.publicDiscoveryStore ?? options.publicApiStore
+  const catalog = options.discoveryCatalog ?? (
+    catalogStore ? new PostgresDiscoveryCatalog(catalogStore, imageOptions) : undefined
+  )
+  const symbolRequestStore = options.symbolRequestStore ?? options.publicDiscoveryStore
 
   app.get('/api/health', (context) => context.json({ status: 'ok' as const }))
 
@@ -60,16 +71,15 @@ export function createApp(options: AppOptions = {}) {
 
   app.all('/api/app/*', (context) => context.json({ error: 'not_found' as const }, 404))
 
-  if (options.publicReadStore) {
+  if (catalog || options.publicReadStore) {
     const store = options.publicReadStore
-    const imageOptions: PublicReadImageOptions = {
-      s3Bucket: options.s3Bucket,
-      s3Cdn: options.s3Cdn,
-    }
 
     app.get('/api/v2/repositories', async (context) => {
       try {
-        return context.json({ repositories: await listPublicRepositories(store) })
+        const repositories = catalog
+          ? await catalog.listRepositories()
+          : await listPublicRepositories(store!)
+        return context.json({ repositories })
       } catch {
         return context.json({ error: 'database_unavailable' as const }, 503)
       }
@@ -78,7 +88,9 @@ export function createApp(options: AppOptions = {}) {
     app.get('/api/v2/repositories/:repoKey', async (context) => {
       try {
         const repoKey = context.req.param('repoKey')
-        const repository = await findPublicRepository(store, repoKey)
+        const repository = catalog
+          ? await catalog.findRepository(repoKey)
+          : await findPublicRepository(store!, repoKey)
         if (!repository) return context.json({ error: 'not found', id: repoKey }, 404)
         return context.json({ repository })
       } catch {
@@ -88,12 +100,14 @@ export function createApp(options: AppOptions = {}) {
 
     app.get('/api/v2/symbols/:repoKey/:symbolKey', async (context) => {
       try {
-        const result = await findPublicSymbol(
-          store,
-          context.req.param('repoKey'),
-          context.req.param('symbolKey'),
-          imageOptions,
-        )
+        const result = catalog
+          ? await catalog.findSymbol(context.req.param('repoKey'), context.req.param('symbolKey'))
+          : await findPublicSymbol(
+              store!,
+              context.req.param('repoKey'),
+              context.req.param('symbolKey'),
+              imageOptions,
+            )
         if (result.kind === 'not_found') {
           return context.json({ error: 'not found', id: result.id }, 404)
         }
@@ -104,12 +118,7 @@ export function createApp(options: AppOptions = {}) {
     })
   }
 
-  if (options.publicDiscoveryStore) {
-    const store = options.publicDiscoveryStore
-    const imageOptions: PublicReadImageOptions = {
-      s3Bucket: options.s3Bucket,
-      s3Cdn: options.s3Cdn,
-    }
+  if (catalog) {
     const page = (value: string | undefined) => {
       const parsed = Number.parseInt(value ?? '0', 10)
       return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0
@@ -117,7 +126,7 @@ export function createApp(options: AppOptions = {}) {
 
     app.get('/api/v1/symbols/random', async (context) => {
       try {
-        return context.json(await randomPublicSymbols(store, imageOptions))
+        return context.json(await catalog.randomSymbols())
       } catch {
         return context.json({ error: 'database_unavailable' as const }, 503)
       }
@@ -125,11 +134,10 @@ export function createApp(options: AppOptions = {}) {
 
     app.get('/api/v1/repositories/:repoKey/symbols', async (context) => {
       try {
-        const result = await listPublicRepositorySymbols(store, context.req.param('repoKey'), {
+        const result = await catalog.listRepositorySymbols(context.req.param('repoKey'), {
           page: page(context.req.query('page')),
           unsafe: context.req.query('unsafe') === '1',
           hasSkin: context.req.query('has_skin') === '1',
-          image: imageOptions,
         })
         if (result.kind === 'not_found') return context.json({ error: 'not found' }, 404)
         return context.json({
@@ -143,18 +151,20 @@ export function createApp(options: AppOptions = {}) {
 
     app.get('/api/v1/symbols/search', async (context) => {
       try {
-        return context.json(await searchPublicSymbols(store, {
+        return context.json(await catalog.searchSymbols({
           query: context.req.query('q') ?? '',
           locale: context.req.query('locale'),
           safe: context.req.query('safe') !== '0',
           page: page(context.req.query('page')),
-          image: imageOptions,
         }))
       } catch {
         return context.json({ error: 'database_unavailable' as const }, 503)
       }
     })
 
+  }
+
+  if (symbolRequestStore) {
     app.post('/api/v1/symbols/requests', async (context) => {
       let input: unknown
       try {
@@ -167,7 +177,7 @@ export function createApp(options: AppOptions = {}) {
       }
       try {
         const submitted = await submitPublicSymbolRequest(
-          store,
+          symbolRequestStore,
           input as { name?: unknown; first_letter?: unknown; comments?: unknown },
           new Date().toISOString(),
         )
@@ -181,10 +191,6 @@ export function createApp(options: AppOptions = {}) {
 
   if (options.publicApiStore) {
     const store = options.publicApiStore
-    const imageOptions: PublicReadImageOptions = {
-      s3Bucket: options.s3Bucket,
-      s3Cdn: options.s3Cdn,
-    }
     const now = options.publicApiNow ?? (() => new Date())
     const nonce = options.publicApiNonce ?? securePublicApiNonce
     const encryptionKey = options.publicApiEncryptionKey ?? process.env.SECURE_ENCRYPTION_KEY
@@ -239,18 +245,49 @@ export function createApp(options: AppOptions = {}) {
         }
         context.header('Authorized', 'true')
         const pageValue = Number.parseInt(context.req.query('page') ?? '0', 10)
-        return context.json(await searchPublicSymbols(store, {
+        const results = catalog
+          ? await catalog.searchSymbols({
+              query: context.req.query('q') ?? '',
+              locale: context.req.query('locale'),
+              safe: context.req.query('safe') !== '0',
+              page: Number.isInteger(pageValue) && pageValue >= 0 ? pageValue : 0,
+            })
+          : await searchPublicSymbols(store, {
           query: context.req.query('q') ?? '',
           locale: context.req.query('locale'),
           safe: context.req.query('safe') !== '0',
           page: Number.isInteger(pageValue) && pageValue >= 0 ? pageValue : 0,
           image: imageOptions,
-        }))
+        })
+        return context.json(results)
       } catch {
         return context.json({ error: 'database_unavailable' as const }, 503)
       }
     })
   }
+
+  app.get('/api/synthetic-images/:spec', (context) => {
+    const spec = context.req.param('spec')
+    const match = /^(\d{7})(?:-(varianted-skin|variant-(light|medium-light|medium|medium-dark|dark)))?\.svg$/.exec(spec)
+    if (!match) return context.json({ error: 'not_found' as const }, 404)
+    const id = Number.parseInt(match[1]!, 10)
+    const tone = match[3]
+    const colors: Record<string, string> = {
+      light: '#f3d2b3',
+      'medium-light': '#d7a77b',
+      medium: '#ae724c',
+      'medium-dark': '#7a4930',
+      dark: '#4a2b20',
+    }
+    const foreground = tone ? colors[tone]! : `hsl(${id % 360} 58% 44%)`
+    const label = String(id).padStart(7, '0')
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Synthetic symbol ${label}"><rect width="256" height="256" rx="28" fill="#f8fafc"/><circle cx="128" cy="104" r="62" fill="${foreground}"/><path d="M56 220c8-48 38-72 72-72s64 24 72 72" fill="${foreground}"/><text x="128" y="242" text-anchor="middle" font-family="system-ui,sans-serif" font-size="18" fill="#172033">${label}</text></svg>`
+    return context.body(svg, 200, {
+      'Content-Type': 'image/svg+xml; charset=utf-8',
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'X-Content-Type-Options': 'nosniff',
+    })
+  })
 
   app.all('/api/*', (context, next) => {
     if (context.req.path === '/api') return next()
