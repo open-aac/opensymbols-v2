@@ -1,7 +1,6 @@
 import { existsSync } from 'node:fs'
 import { Hono } from 'hono'
 import { serveStatic } from '@hono/node-server/serve-static'
-import { createLegacyProxy } from './legacy-proxy.js'
 import {
   findPublicRepository,
   findPublicSymbol,
@@ -15,6 +14,15 @@ import {
   submitPublicSymbolRequest,
 } from './public-discovery-api.js'
 import type { PublicDiscoveryStore, PublicReadStore } from './public-read-store.js'
+import type { PublicApiStore } from './public-read-store.js'
+import {
+  createSharedSecret,
+  exchangeSharedSecret,
+  securePublicApiNonce,
+  validateSharedSecretApplication,
+  verifyAccessToken,
+  type PublicApiNonce,
+} from './public-api-auth.js'
 import type { AppSessionVerifier } from './clerk-auth.js'
 
 export interface AppOptions {
@@ -22,31 +30,18 @@ export interface AppOptions {
   legacyServerTimeoutMs?: number
   publicReadStore?: PublicReadStore
   publicDiscoveryStore?: PublicDiscoveryStore
+  publicApiStore?: PublicApiStore
+  publicApiEncryptionKey?: string
+  publicApiNow?: () => Date
+  publicApiNonce?: PublicApiNonce
   s3Bucket?: string
   s3Cdn?: string
   siteRoot?: string
   appSessionVerifier?: AppSessionVerifier
 }
 
-function legacyTimeoutFromEnvironment() {
-  const value = Number.parseInt(process.env.LEGACY_SERVER_TIMEOUT_MS ?? '10000', 10)
-
-  if (!Number.isInteger(value) || value < 1) {
-    throw new Error('LEGACY_SERVER_TIMEOUT_MS must be a positive integer')
-  }
-
-  return value
-}
-
 export function createApp(options: AppOptions = {}) {
   const app = new Hono()
-  const legacyProxy = createLegacyProxy({
-    serverUrl:
-      options.legacyServerUrl ??
-      process.env.LEGACY_SERVER_URL ??
-      'http://127.0.0.1:3001',
-    timeoutMs: options.legacyServerTimeoutMs ?? legacyTimeoutFromEnvironment(),
-  })
 
   app.get('/api/health', (context) => context.json({ status: 'ok' as const }))
 
@@ -184,9 +179,78 @@ export function createApp(options: AppOptions = {}) {
     })
   }
 
-  app.post('/api/v2/generate_secret', legacyProxy)
-  app.post('/api/v2/token', legacyProxy)
-  app.get('/api/v2/symbols', legacyProxy)
+  if (options.publicApiStore) {
+    const store = options.publicApiStore
+    const imageOptions: PublicReadImageOptions = {
+      s3Bucket: options.s3Bucket,
+      s3Cdn: options.s3Cdn,
+    }
+    const now = options.publicApiNow ?? (() => new Date())
+    const nonce = options.publicApiNonce ?? securePublicApiNonce
+    const encryptionKey = options.publicApiEncryptionKey ?? process.env.SECURE_ENCRYPTION_KEY
+    const formBody = async (context: { req: { parseBody(): Promise<Record<string, unknown>> } }) => {
+      try {
+        return await context.req.parseBody()
+      } catch {
+        return null
+      }
+    }
+
+    app.post('/api/v2/generate_secret', async (context) => {
+      const body = await formBody(context)
+      const application = body ? validateSharedSecretApplication(body) : null
+      if (!application) {
+        return context.json({ error: 'organization, valid email, and purpose are required' }, 422)
+      }
+      try {
+        const sharedSecret = await createSharedSecret(store, application, now(), nonce)
+        return context.json({ shared_secret: sharedSecret })
+      } catch {
+        return context.json({ error: 'database_unavailable' as const }, 503)
+      }
+    })
+
+    app.post('/api/v2/token', async (context) => {
+      const body = await formBody(context)
+      const sharedSecret = typeof body?.secret === 'string' ? body.secret.trim() : ''
+      if (!sharedSecret) return context.json({ error: 'secret required' }, 400)
+      if (!encryptionKey) return context.json({ error: 'authentication_unconfigured' as const }, 503)
+      if (sharedSecret.startsWith('temp')) return context.json({ error: 'invalid token' }, 400)
+      try {
+        const result = await exchangeSharedSecret(store, sharedSecret, now(), nonce, encryptionKey)
+        if (!result) return context.json({ error: 'invalid token' }, 400)
+        return context.json(result)
+      } catch {
+        return context.json({ error: 'database_unavailable' as const }, 503)
+      }
+    })
+
+    app.get('/api/v2/symbols', async (context) => {
+      if (!encryptionKey) return context.json({ error: 'authentication_unconfigured' as const }, 503)
+      const token = context.req.header('authorization') ?? context.req.query('access_token')
+      if (!token) return context.json({ error: 'invalid token' }, 400)
+      try {
+        const verification = await verifyAccessToken(store, token, now(), encryptionKey)
+        if (verification.kind === 'expired') {
+          return context.json({ error: 'token expired', token_expired: true }, 401)
+        }
+        if (verification.kind === 'invalid') {
+          return context.json({ error: 'invalid access token', invalid_token: true }, 400)
+        }
+        context.header('Authorized', 'true')
+        const pageValue = Number.parseInt(context.req.query('page') ?? '0', 10)
+        return context.json(await searchPublicSymbols(store, {
+          query: context.req.query('q') ?? '',
+          locale: context.req.query('locale'),
+          safe: context.req.query('safe') !== '0',
+          page: Number.isInteger(pageValue) && pageValue >= 0 ? pageValue : 0,
+          image: imageOptions,
+        }))
+      } catch {
+        return context.json({ error: 'database_unavailable' as const }, 503)
+      }
+    })
+  }
 
   app.all('/api/*', (context, next) => {
     if (context.req.path === '/api') return next()

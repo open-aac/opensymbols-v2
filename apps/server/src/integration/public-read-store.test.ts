@@ -33,6 +33,13 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
           repo_key varchar NOT NULL UNIQUE,
           settings text
         );
+        CREATE TABLE external_sources (
+          id serial PRIMARY KEY,
+          settings text,
+          token varchar NOT NULL UNIQUE,
+          created_at timestamp NOT NULL,
+          updated_at timestamp NOT NULL
+        );
         CREATE TABLE picture_symbols (
           id serial PRIMARY KEY,
           repo_key varchar NOT NULL,
@@ -86,7 +93,10 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
         [100, 'demo', 'hello', '**{"name":"Hello","enabled":true}', true, false, false],
       )
 
-      store = createPostgresPublicReadStore({ connectionString })
+      store = createPostgresPublicReadStore({
+        connectionString,
+        encryptionKey: 'test-secure-encryption-key',
+      })
       await expect(store.listRepositories()).resolves.toEqual([
         { repoKey: 'demo', settings: { name: 'Database demo', active: true } },
         { repoKey: 'private', settings: { name: 'Private', active: true, protected: true } },
@@ -104,7 +114,16 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
         settings: { name: 'Hello', enabled: true },
       })
 
-      const app = createApp({ publicReadStore: store, publicDiscoveryStore: store })
+      const app = createApp({
+        publicReadStore: store,
+        publicDiscoveryStore: store,
+        publicApiStore: store,
+        publicApiEncryptionKey: 'test-secure-encryption-key',
+        publicApiNow: () => new Date('2026-07-22T10:00:00.000Z'),
+        publicApiNonce: (label) => label === 'external_source_token'
+          ? 'integration-shared-secret'
+          : '0123456789abcdef01234567',
+      })
       const page = await app.request('/api/v1/repositories/demo/symbols')
       const pageBody = await page.json() as { symbols: unknown[]; meta: { next_url: string } }
       expect(page.status).toBe(200)
@@ -126,7 +145,52 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
         "SELECT settings FROM symbol_requests WHERE phrase = 'Bacon' AND locale = 'en'",
       )
       expect(requestRows?.rows).toHaveLength(1)
-      expect(decodeGoSecure(requestRows!.rows[0]!.settings)).toMatchObject({ n_votes: 2 })
+      expect(decodeGoSecure(
+        requestRows!.rows[0]!.settings,
+        'test-secure-encryption-key',
+      )).toMatchObject({ n_votes: 2 })
+
+      const application = await app.request('/api/v2/generate_secret', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          org_name: 'Integration AAC',
+          org_email: 'integration@example.com',
+          org_purpose: 'Database API verification',
+        }),
+      })
+      expect(application.status).toBe(200)
+      await expect(application.json()).resolves.toEqual({ shared_secret: 'integration-shared-secret' })
+      const sourceRows = await setup.query<{ settings: string }>(
+        "SELECT settings FROM external_sources WHERE token = 'integration-shared-secret'",
+      )
+      expect(decodeGoSecure(sourceRows.rows[0]!.settings, 'test-secure-encryption-key')).toEqual({
+        name: 'Integration AAC',
+        email: 'integration@example.com',
+        purpose: 'Database API verification',
+        approved: false,
+      })
+
+      const tokenResponse = await app.request('/api/v2/token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ secret: 'integration-shared-secret' }),
+      })
+      const tokenBody = await tokenResponse.json() as { access_token: string; expires: string }
+      expect(tokenResponse.status).toBe(200)
+      expect(tokenBody.expires).toBe('2026-07-23T10:00:00Z')
+      const authorized = await app.request('/api/v2/symbols?q=page&safe=1&locale=es&page=0', {
+        headers: { Authorization: tokenBody.access_token },
+      })
+      const authorizedBody = await authorized.json() as Array<{
+        locale: string
+        repo_key: string
+        symbol_key: string
+      }>
+      expect(authorized.status).toBe(200)
+      expect(authorizedBody).toHaveLength(50)
+      expect(authorizedBody.every((symbol) => symbol.locale === 'es' && symbol.repo_key === 'demo')).toBe(true)
+      expect(authorizedBody.some((symbol) => symbol.symbol_key === 'page-3')).toBe(false)
     } finally {
       await setup?.end()
       await store?.close()

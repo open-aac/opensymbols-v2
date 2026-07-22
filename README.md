@@ -56,8 +56,8 @@ Hono derives its local read-only PostgreSQL connection from `POSTGRES_USER`,
 `DATABASE_URL`. PostgreSQL is published only on the loopback interface. The
 typed store understands the legacy GoSecure `settings` format. Hono owns
 anonymous repository reads, symbol detail, random symbols, repository symbols,
-public symbol search, and symbol requests. The documented v2 token and
-authorized-search routes remain with Rails.
+public symbol search, symbol requests, shared-secret applications, access-token
+generation, and authorized v2 search. Public API use no longer requires Rails.
 
 Seed the local database with repeatable demo repositories, symbols, defaults,
 requests, and an approved development API source:

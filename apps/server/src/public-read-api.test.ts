@@ -220,13 +220,14 @@ describe('public-read ownership boundaries', () => {
     expect(response.headers.get('x-owner')).toBeNull()
   })
 
-  it('rejects removed methods while retaining the token proxy', async () => {
+  it('rejects removed methods without returning them to Rails', async () => {
     const app = createApp({ publicReadStore: contractStore(), legacyServerUrl: upstreamUrl })
     const post = await app.request('/api/v2/repositories', { method: 'POST' })
     const other = await app.request('/api/v2/token', { method: 'POST' })
     expect(post.status).toBe(404)
     await expect(post.json()).resolves.toEqual({ error: 'not_found' })
-    await expect(other.json()).resolves.toMatchObject({ owner: 'rails', url: '/api/v2/token' })
+    expect(other.status).toBe(404)
+    await expect(other.json()).resolves.toEqual({ error: 'not_found' })
   })
 
   it('does not return public reads to Rails when no store is injected', async () => {

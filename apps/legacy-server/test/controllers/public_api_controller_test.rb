@@ -76,28 +76,4 @@ class PublicApiControllerTest < ActionDispatch::IntegrationTest
     assert_response :not_found
   end
 
-  test 'generates a shared secret for a valid application' do
-    assert_difference('ExternalSource.count', 1) do
-      post '/api/v2/generate_secret', params: {
-        org_name: 'AAC Example',
-        org_email: 'hello@example.com',
-        org_purpose: 'Testing symbol search'
-      }
-    end
-    assert_response :success
-    body = JSON.parse(response.body)
-    assert body['shared_secret'].present?
-    assert_equal 'hello@example.com', ExternalSource.last.settings['email']
-  end
-
-  test 'requires complete shared secret application details' do
-    assert_no_difference('ExternalSource.count') do
-      post '/api/v2/generate_secret', params: {
-        org_name: 'AAC Example',
-        org_email: 'not-an-email',
-        org_purpose: ''
-      }
-    end
-    assert_response :unprocessable_entity
-  end
 end

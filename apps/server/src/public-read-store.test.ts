@@ -127,6 +127,30 @@ describe('PostgresPublicReadStore', () => {
     expect(decodeGoSecure(update?.[1]?.[0] as string)).toMatchObject({ n_votes: 2 })
   })
 
+  it('creates and finds GoSecure-compatible external sources with parameterized queries', async () => {
+    const row = {
+      id: 8,
+      token: 'shared-secret',
+      settings: '**{"name":"AAC Example","approved":false}',
+    }
+    const { database, query } = mockDatabase([row], [row], [row])
+    const store = new PostgresPublicReadStore(database)
+
+    await expect(store.createExternalSource('shared-secret', {
+      name: 'AAC Example', approved: false,
+    }, '2026-07-22T10:00:00.000Z')).resolves.toEqual({
+      id: 8, token: 'shared-secret', settings: { name: 'AAC Example', approved: false },
+    })
+    expect(query.mock.calls[0]?.[0]).toContain('INSERT INTO external_sources')
+    expect(decodeGoSecure(query.mock.calls[0]?.[1]?.[1] as string)).toEqual({
+      name: 'AAC Example', approved: false,
+    })
+    await expect(store.findExternalSourceByToken('shared-secret')).resolves.toMatchObject({ id: 8 })
+    expect(query.mock.calls[1]?.[1]).toEqual(['shared-secret'])
+    await expect(store.findExternalSourceById(8)).resolves.toMatchObject({ token: 'shared-secret' })
+    expect(query.mock.calls[2]?.[1]).toEqual([8])
+  })
+
   it('closes its injected database resource', async () => {
     const close = vi.fn().mockResolvedValue(undefined)
     const database: DatabaseClient = {
