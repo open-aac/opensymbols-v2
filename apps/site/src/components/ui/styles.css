@@ -20,7 +20,7 @@
 .action--primary { color: white; background: var(--color-action); border-color: var(--color-action); }
 .action--primary:hover { color: white; background: var(--color-action-hover); border-color: var(--color-action-hover); }
 .action--quiet { color: var(--color-action); background: transparent; border-color: transparent; text-decoration: underline; }
-.action:disabled { color: var(--color-text-muted); background: var(--color-surface-muted); border-color: var(--color-border); cursor: not-allowed; opacity: 0.72; }
+.action:disabled { color: var(--color-text-muted); background: var(--color-surface-muted); border-color: var(--color-border); cursor: not-allowed; }
 .card-link { color: var(--color-text); text-decoration: none; }
 .brand-endorsement {
   display: inline-flex;
@@ -84,7 +84,7 @@ textarea.field__control { min-height: 7rem; resize: vertical; }
 .status-message h2 { margin-top: 0; }
 .description-list { display: grid; gap: var(--space-2); }
 .description-list__item { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: var(--space-4); }
-.description-list dt { font-weight: 700; text-align: right; }
+.description-list dt { font-weight: 700; text-align: end; }
 .description-list dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 
 @media (max-width: 480px) {
@@ -93,7 +93,7 @@ textarea.field__control { min-height: 7rem; resize: vertical; }
   .section-heading { align-items: flex-start; flex-direction: column; }
   .form-actions { align-items: stretch; flex-direction: column; }
   .description-list__item { display: block; }
-  .description-list dt { margin-top: var(--space-3); text-align: left; }
+  .description-list dt { margin-top: var(--space-3); text-align: start; }
 }
 
 @media (forced-colors: active) {

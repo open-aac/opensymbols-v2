@@ -20,6 +20,7 @@ import {
   FormActions,
   PageSection,
   PageState,
+  ResponsiveGrid,
   SelectField,
   Surface,
   TextAreaField,
@@ -153,9 +154,9 @@ function RepositoryPage() {
         </FormActions>
       </form>
       <PageState loading={loading} error={error} onRetry={() => void load(true, 0)}>
-        <div className="symbol-grid">
+        <ResponsiveGrid className="symbol-grid">
           {symbols.map((symbol) => <SymbolCard key={symbol.id} symbol={applySkin(symbol)} />)}
-        </div>
+        </ResponsiveGrid>
         {!loading && symbols.length === 0 && <EmptyState heading="No results found" description="Try changing the search or filters." />}
       </PageState>
       {!activeSearch && hasMore && (

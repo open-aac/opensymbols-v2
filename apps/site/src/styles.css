@@ -7,7 +7,7 @@
   --color-text-muted: #4c5b62;
   --color-action: #086b65;
   --color-action-hover: #055650;
-  --color-border: #b8cbc5;
+  --color-border: #7e948e;
   --color-error: #8b251c;
   --color-error-soft: #fff0ed;
   --color-focus: #173b66;
@@ -35,7 +35,7 @@
   color: var(--color-text);
   background: var(--color-canvas);
   font-family: var(--font-sans);
-  font-size: 16px;
+  font-size: 100%;
   font-synthesis: none;
   line-height: 1.5;
   text-rendering: optimizeLegibility;
@@ -55,9 +55,8 @@ h1, h2, h3 { line-height: 1.15; text-wrap: balance; }
 p { text-wrap: pretty; }
 
 :where(a, button, input, select, textarea):focus-visible {
-  outline: 0.2rem solid var(--color-focus);
-  outline-offset: 0.2rem;
-  box-shadow: 0 0 0 0.12rem var(--color-surface);
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
 :where(a, button, input, select, textarea, [tabindex]), :target {
