@@ -9,7 +9,10 @@ vi.mock('@clerk/react-router', () => {
     children,
     showName,
   }: {
-    appearance: { elements: { userButtonTrigger: Record<string, string> } }
+    appearance: {
+      variables: Record<string, string>
+      elements: { userButtonPopoverCard: Record<string, string>; userButtonTrigger: Record<string, string> }
+    }
     children: React.ReactNode
     showName: boolean
   }) {
@@ -17,6 +20,8 @@ vi.mock('@clerk/react-router', () => {
       <div
         data-min-height={appearance.elements.userButtonTrigger.minHeight}
         data-min-width={appearance.elements.userButtonTrigger.minWidth}
+        data-popover-border={appearance.elements.userButtonPopoverCard.border}
+        data-primary={appearance.variables.colorPrimary}
         data-show-name={String(showName)}
       >
         <button aria-label="Open user menu">Avatar</button>
@@ -41,6 +46,8 @@ describe('Clerk user control', () => {
     expect(configuration).toHaveAttribute('data-show-name', 'false')
     expect(configuration).toHaveAttribute('data-min-width', '44px')
     expect(configuration).toHaveAttribute('data-min-height', '44px')
+    expect(configuration).toHaveAttribute('data-primary', 'var(--color-action)')
+    expect(configuration).toHaveAttribute('data-popover-border', '2px solid var(--color-border)')
     expect(screen.getByRole('link', { name: 'Open Symbols account' })).toHaveAttribute('href', '/account')
     expect(screen.getByRole('button', { name: 'manageAccount' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'signOut' })).toBeInTheDocument()

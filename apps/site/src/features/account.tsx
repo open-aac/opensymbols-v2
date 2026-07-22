@@ -105,7 +105,7 @@ export function AccountLayout() {
             </NavLink>
           ))}
         </nav>
-        <Surface className="account-dashboard__content">
+        <Surface className="account-dashboard__content min-w-0">
           <Outlet />
         </Surface>
       </div>

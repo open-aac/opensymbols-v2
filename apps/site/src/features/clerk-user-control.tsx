@@ -1,17 +1,34 @@
 import { UserButton } from '@clerk/react-router'
 
 const userButtonAppearance = {
+  variables: {
+    colorPrimary: 'var(--color-action)',
+    colorText: 'var(--color-text)',
+    colorTextSecondary: 'var(--color-text-muted)',
+    colorBackground: 'var(--color-surface)',
+    borderRadius: 'var(--radius-sm)',
+    fontFamily: 'var(--font-sans)',
+  },
   elements: {
     userButtonTrigger: {
       minWidth: '44px',
       minHeight: '44px',
       padding: '0.25rem',
       borderRadius: '999px',
+      border: '2px solid var(--color-border)',
+      background: 'var(--color-surface)',
     },
     userButtonAvatarBox: {
       width: '36px',
       height: '36px',
     },
+    userButtonPopoverCard: {
+      background: 'var(--color-surface)',
+      border: '2px solid var(--color-border)',
+      borderRadius: 'var(--radius-md)',
+      boxShadow: 'none',
+    },
+    userButtonPopoverActionButton: { minHeight: '44px' },
   },
 } as const
 

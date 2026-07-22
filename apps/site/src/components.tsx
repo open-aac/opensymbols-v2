@@ -17,14 +17,16 @@ export function SymbolCard({ symbol, compact = false }: { symbol: SymbolResult; 
 export function RepositoryCard({ repository }: { repository: Repository }) {
   return (
     <CardLink className="repository-card" to={`/repositories/${repository.repo_key}`}>
-      <img
-        src={repository.logo_url}
-        alt=""
-        onError={(event) => { event.currentTarget.src = '/open-symbols-mark.svg' }}
-      />
-      <strong>{repository.name}</strong>
-      <span>{repository.attribution.license || 'mixed licences'}</span>
-      <span>{repository.symbol_count.toLocaleString()} symbols</span>
+      <span className="repository-card__image-plate">
+        <img
+          src={repository.logo_url}
+          alt=""
+          onError={(event) => { event.currentTarget.src = '/open-symbols-mark.svg' }}
+        />
+      </span>
+      <strong className="repository-card__name">{repository.name}</strong>
+      <span className="repository-card__meta">{repository.attribution.license || 'mixed licences'}</span>
+      <span className="repository-card__meta">{repository.symbol_count.toLocaleString()} symbols</span>
     </CardLink>
   )
 }

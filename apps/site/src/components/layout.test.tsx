@@ -112,6 +112,7 @@ describe('site layout', () => {
     expect(screen.getByRole('contentinfo')).toHaveTextContent('Open Symbols is open source')
     expect(screen.getByRole('link', { name: 'Skip to content' })).toHaveAttribute('href', '#main')
     expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1')
+    expect(screen.getByRole('main')).toHaveClass('min-w-0')
     expect(document.documentElement.style.getPropertyValue('--site-header-height')).toBe('84px')
     await expectNoAccessibilityViolations(view.container)
   })
