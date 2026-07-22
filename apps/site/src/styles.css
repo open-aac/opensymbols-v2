@@ -93,16 +93,12 @@ p { text-wrap: pretty; }
 .not-found { max-width: 38rem; margin: auto; padding-block: var(--space-8); text-align: center; }
 
 @media (max-width: 800px) {
-  .site-header__inner { align-items: flex-start; flex-direction: column; gap: var(--space-2); }
-  .site-navigation { justify-content: flex-start; }
   .discovery-hero, .repository-summary, .symbol-detail, .api-call, .api-secret-request { grid-template-columns: 1fr; }
   .discovery-hero { padding: var(--space-6); }
   .discovery-about { align-items: flex-start; flex-direction: column; }
 }
 
 @media (max-width: 480px) {
-  .site-navigation { width: 100%; }
-  .site-navigation a, .site-navigation button { padding-inline: 0.55rem; }
   .discovery-page { padding-top: var(--space-5); }
   .discovery-hero, .discovery-about, .request-symbol { padding: var(--space-5); }
   .section-heading { align-items: flex-start; flex-direction: column; }

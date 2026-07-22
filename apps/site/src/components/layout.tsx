@@ -1,9 +1,177 @@
-import { useEffect, useRef, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { LazyMotion, domAnimation, useReducedMotion } from 'motion/react'
+import * as m from 'motion/react-m'
+import { Link, useLocation } from 'react-router-dom'
 import { useAppAuth } from '../features/authentication'
 import { ClerkUserControl } from '../features/clerk-user-control'
 import { BrandEndorsement, PageContainer } from './ui'
 import './layout.css'
+
+const MOBILE_NAVIGATION_QUERY = '(max-width: 800px)'
+
+function useMobileNavigation() {
+  const [mobile, setMobile] = useState(() =>
+    typeof window.matchMedia === 'function' && window.matchMedia(MOBILE_NAVIGATION_QUERY).matches)
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+    const query = window.matchMedia(MOBILE_NAVIGATION_QUERY)
+    const update = () => setMobile(query.matches)
+    update()
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
+
+  return mobile
+}
+
+type DrawerPhase = 'closed' | 'open' | 'closing'
+
+function MenuIcon() {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="20" height="20">
+      <path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function MobileNavigation({ account }: { account: ReturnType<typeof useAppAuth> }) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const closeRef = useRef<HTMLButtonElement>(null)
+  const restoreFocusRef = useRef(true)
+  const [phase, setPhase] = useState<DrawerPhase>('closed')
+  const [rtl, setRtl] = useState(false)
+  const reducedMotion = useReducedMotion()
+  const reducedMotionRef = useRef(reducedMotion)
+  const location = useLocation()
+  const active = phase !== 'closed'
+
+  const finishClose = useCallback((restoreFocus = restoreFocusRef.current) => {
+    const dialog = dialogRef.current
+    if (dialog?.open) dialog.close()
+    setPhase('closed')
+    if (restoreFocus) triggerRef.current?.focus()
+  }, [])
+
+  const requestClose = useCallback((restoreFocus = true, immediate = false) => {
+    if (!dialogRef.current?.open) return
+    restoreFocusRef.current = restoreFocus
+    if (immediate || reducedMotionRef.current) finishClose(restoreFocus)
+    else setPhase('closing')
+  }, [finishClose])
+
+  const open = () => {
+    const dialog = dialogRef.current
+    if (!dialog || dialog.open) return
+    setRtl(getComputedStyle(dialog).direction === 'rtl')
+    restoreFocusRef.current = true
+    dialog.showModal()
+    setPhase('open')
+    closeRef.current?.focus()
+  }
+
+  useEffect(() => {
+    reducedMotionRef.current = reducedMotion
+  }, [reducedMotion])
+
+  useEffect(() => {
+    if (!active) return
+    const previousOverflow = document.documentElement.style.overflow
+    document.documentElement.style.overflow = 'hidden'
+    return () => {
+      document.documentElement.style.overflow = previousOverflow
+    }
+  }, [active])
+
+  useEffect(() => {
+    if (dialogRef.current?.open) requestClose(true)
+  }, [location.key, requestClose])
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+    const query = window.matchMedia(MOBILE_NAVIGATION_QUERY)
+    const closeAtDesktop = () => {
+      if (!query.matches) requestClose(false, true)
+    }
+    query.addEventListener('change', closeAtDesktop)
+    return () => query.removeEventListener('change', closeAtDesktop)
+  }, [requestClose])
+
+  return (
+    <>
+      <div className="mobile-header-actions">
+        {account.configured && account.loaded && account.signedIn && <ClerkUserControl />}
+        <button
+          ref={triggerRef}
+          className="mobile-menu-trigger"
+          type="button"
+          aria-controls="mobile-navigation-dialog"
+          aria-expanded={active}
+          aria-haspopup="dialog"
+          onClick={open}
+        >
+          <MenuIcon />
+          <span>Menu</span>
+        </button>
+      </div>
+      <dialog
+        ref={dialogRef}
+        id="mobile-navigation-dialog"
+        className="mobile-navigation-dialog"
+        aria-labelledby="mobile-navigation-heading"
+        onCancel={(event) => {
+          event.preventDefault()
+          requestClose()
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            requestClose()
+          }
+        }}
+      >
+        <button
+          className="mobile-navigation-backdrop"
+          type="button"
+          tabIndex={-1}
+          aria-label="Dismiss menu"
+          onClick={() => requestClose()}
+        />
+        <LazyMotion features={domAnimation} strict>
+          <m.div
+            className="mobile-navigation-panel"
+            initial={false}
+            animate={{ x: phase === 'open' ? 0 : rtl ? '-100%' : '100%' }}
+            transition={reducedMotion
+              ? { duration: 0 }
+              : {
+                  duration: phase === 'open' ? 0.25 : 0.2,
+                  ease: [0.32, 0.72, 0, 1],
+                }}
+            onAnimationComplete={() => {
+              if (phase === 'closing') finishClose()
+            }}
+          >
+            <div className="mobile-navigation-panel__header">
+              <h2 id="mobile-navigation-heading">Menu</h2>
+              <button ref={closeRef} className="mobile-navigation-close" type="button" onClick={() => requestClose()}>
+                Close menu
+              </button>
+            </div>
+            <nav className="mobile-navigation" aria-label="Primary navigation">
+              <Link to="/search">Search symbols</Link>
+              <Link to="/api">API documentation</Link>
+              {account.configured && account.loaded && !account.signedIn && <Link to="/sign-in">Sign in</Link>}
+              {account.configured && account.loaded && !account.signedIn && <Link to="/sign-up">Create account</Link>}
+              {account.configured && account.loaded && account.signedIn && <Link to="/account">Your account</Link>}
+            </nav>
+          </m.div>
+        </LazyMotion>
+      </dialog>
+    </>
+  )
+}
 
 function useStickyHeaderOffset() {
   const headerRef = useRef<HTMLElement>(null)
@@ -37,6 +205,7 @@ function useStickyHeaderOffset() {
 export function SiteLayout({ children }: { children: ReactNode }) {
   const account = useAppAuth()
   const headerRef = useStickyHeaderOffset()
+  const mobileNavigation = useMobileNavigation()
 
   return (
     <div className="site-shell">
@@ -53,13 +222,17 @@ export function SiteLayout({ children }: { children: ReactNode }) {
               iconSrc="https://www.openaac.org/openaac.svg"
             />
           </div>
-          <nav className="site-navigation" aria-label="Primary navigation">
-            <Link to="/search">Search symbols</Link>
-            <Link to="/api">API documentation</Link>
-            {account.configured && account.loaded && !account.signedIn && <Link to="/sign-in">Sign in</Link>}
-            {account.configured && account.loaded && !account.signedIn && <Link to="/sign-up">Create account</Link>}
-            {account.configured && account.loaded && account.signedIn && <ClerkUserControl />}
-          </nav>
+          {mobileNavigation
+            ? <MobileNavigation account={account} />
+            : (
+                <nav className="site-navigation" aria-label="Primary navigation">
+                  <Link to="/search">Search symbols</Link>
+                  <Link to="/api">API documentation</Link>
+                  {account.configured && account.loaded && !account.signedIn && <Link to="/sign-in">Sign in</Link>}
+                  {account.configured && account.loaded && !account.signedIn && <Link to="/sign-up">Create account</Link>}
+                  {account.configured && account.loaded && account.signedIn && <ClerkUserControl />}
+                </nav>
+              )}
         </PageContainer>
       </header>
       <main id="main" tabIndex={-1}>{children}</main>
