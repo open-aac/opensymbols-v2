@@ -1,4 +1,5 @@
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import { defineConfig } from 'vitest/config'
 import { fileURLToPath } from 'node:url'
 import { resolveServerProxyTarget } from './vite-environment'
@@ -13,7 +14,7 @@ export default defineConfig(({ mode }) => {
   })
 
   return {
-    plugins: [react()],
+    plugins: [tailwindcss(), react()],
     envDir: environmentDirectory,
     server: {
       proxy: {

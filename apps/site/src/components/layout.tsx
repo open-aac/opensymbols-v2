@@ -261,7 +261,7 @@ export function SiteLayout({ children }: { children: ReactNode }) {
               )}
         </PageContainer>
       </header>
-      <main id="main" tabIndex={-1}>{children}</main>
+      <main id="main" className="min-w-0" tabIndex={-1}>{children}</main>
       <footer className="site-footer">
         <PageContainer>
           <p>Open Symbols is <a href="https://github.com/open-aac/opensymbols">open source</a> and powered by <a href="https://www.openaac.org">OpenAAC</a>.</p>
