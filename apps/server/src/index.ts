@@ -15,6 +15,8 @@ const app = createApp({
   siteRoot,
   publicReadStore,
   publicDiscoveryStore: publicReadStore,
+  publicApiStore: publicReadStore,
+  publicApiEncryptionKey: process.env.SECURE_ENCRYPTION_KEY,
   s3Bucket: process.env.S3_BUCKET,
   s3Cdn: process.env.S3_CDN,
   appSessionVerifier: clerkSessionVerifierFromEnvironment(),

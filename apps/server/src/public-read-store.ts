@@ -28,6 +28,25 @@ interface SymbolRequestDatabaseRow extends QueryResultRow {
   settings: string | null
 }
 
+interface ExternalSourceDatabaseRow extends QueryResultRow {
+  id: number
+  token: string
+  settings: string | null
+}
+
+export interface ExternalSourceRecord {
+  id: number
+  token: string
+  settings: {
+    name?: string
+    email?: string
+    purpose?: string
+    approved?: boolean
+    full_access?: boolean
+    [key: string]: JsonValue | undefined
+  }
+}
+
 export interface DatabaseSession {
   query<Row extends QueryResultRow>(text: string, values?: unknown[]): Promise<{ rows: Row[] }>
 }
@@ -49,6 +68,16 @@ export interface PublicDiscoveryStore extends PublicReadStore {
   addSymbolRequest(phrase: string, comment: string, createdAt: string): Promise<void>
 }
 
+export interface PublicApiStore extends PublicDiscoveryStore {
+  createExternalSource(
+    token: string,
+    settings: ExternalSourceRecord['settings'],
+    createdAt: string,
+  ): Promise<ExternalSourceRecord>
+  findExternalSourceByToken(token: string): Promise<ExternalSourceRecord | null>
+  findExternalSourceById(id: number): Promise<ExternalSourceRecord | null>
+}
+
 export interface PostgresPublicReadStoreOptions {
   connectionString: string
   encryptionKey?: string
@@ -63,7 +92,7 @@ function settingsObject(value: string | null, encryptionKey: string | undefined)
   return decoded as { [key: string]: JsonValue }
 }
 
-export class PostgresPublicReadStore implements PublicDiscoveryStore {
+export class PostgresPublicReadStore implements PublicApiStore {
   constructor(
     private readonly database: DatabaseClient,
     private readonly encryptionKey?: string,
@@ -159,6 +188,42 @@ export class PostgresPublicReadStore implements PublicDiscoveryStore {
     })
   }
 
+  async createExternalSource(
+    token: string,
+    sourceSettings: ExternalSourceRecord['settings'],
+    createdAt: string,
+  ) {
+    const settings = encodeGoSecure(
+      { ...sourceSettings } as { [key: string]: JsonValue },
+      this.encryptionKey,
+    )
+    const result = await this.database.query<ExternalSourceDatabaseRow>(
+      `INSERT INTO external_sources (token, settings, created_at, updated_at)
+       VALUES ($1, $2, $3, $3)
+       RETURNING id, token, settings`,
+      [token, settings, createdAt],
+    )
+    return this.externalSourceRecord(result.rows[0]!)
+  }
+
+  async findExternalSourceByToken(token: string) {
+    const result = await this.database.query<ExternalSourceDatabaseRow>(
+      'SELECT id, token, settings FROM external_sources WHERE token = $1 LIMIT 1',
+      [token],
+    )
+    const row = result.rows[0]
+    return row ? this.externalSourceRecord(row) : null
+  }
+
+  async findExternalSourceById(id: number) {
+    const result = await this.database.query<ExternalSourceDatabaseRow>(
+      'SELECT id, token, settings FROM external_sources WHERE id = $1 LIMIT 1',
+      [id],
+    )
+    const row = result.rows[0]
+    return row ? this.externalSourceRecord(row) : null
+  }
+
   close() {
     return this.closeDatabase()
   }
@@ -179,6 +244,14 @@ export class PostgresPublicReadStore implements PublicDiscoveryStore {
       hasSkin: row.has_skin,
       unsafeResult: row.unsafe_result,
       settings: settingsObject(row.settings, this.encryptionKey) as SymbolSettings,
+    }
+  }
+
+  private externalSourceRecord(row: ExternalSourceDatabaseRow): ExternalSourceRecord {
+    return {
+      id: row.id,
+      token: row.token,
+      settings: settingsObject(row.settings, this.encryptionKey) as ExternalSourceRecord['settings'],
     }
   }
 }
