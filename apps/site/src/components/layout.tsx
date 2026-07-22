@@ -1,29 +1,9 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { checkSession } from '../api'
 import { useAppAuth } from '../features/authentication'
 import { ClerkUserControl } from '../features/clerk-user-control'
 import { BrandEndorsement, PageContainer } from './ui'
 import './layout.css'
-
-function useLegacySessionBridge() {
-  useEffect(() => {
-    const token = localStorage.getItem('auth_token')
-    if (!token) return
-
-    checkSession(token)
-      .then((session) => {
-        if (!session.valid) throw new Error('Invalid session')
-        const refreshedToken = session.refresh_token || token
-        localStorage.setItem('auth_token', refreshedToken)
-        document.cookie = `auth=${refreshedToken};path=/;SameSite=Lax`
-      })
-      .catch(() => {
-        localStorage.removeItem('auth_token')
-        document.cookie = 'auth=;path=/;max-age=0;SameSite=Lax'
-      })
-  }, [])
-}
 
 function useStickyHeaderOffset() {
   const headerRef = useRef<HTMLElement>(null)
@@ -55,7 +35,6 @@ function useStickyHeaderOffset() {
 }
 
 export function SiteLayout({ children }: { children: ReactNode }) {
-  useLegacySessionBridge()
   const account = useAppAuth()
   const headerRef = useStickyHeaderOffset()
 

@@ -39,7 +39,6 @@ export const handlers = [
     })
   }),
   http.post('/api/v1/symbols/requests', () => HttpResponse.json({ submitted: true })),
-  http.get('/api/v1/token_check', () => HttpResponse.json({ valid: true, user_name: 'Demo Admin' })),
 ]
 
 export const server = setupServer(...handlers)

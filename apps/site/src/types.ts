@@ -40,9 +40,3 @@ export interface PaginatedSymbols {
   symbols: SymbolResult[]
   meta?: { next_url?: string }
 }
-
-export interface SessionInfo {
-  valid: boolean
-  user_name?: string
-  refresh_token?: string
-}
