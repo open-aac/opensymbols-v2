@@ -2,7 +2,7 @@ import { http, HttpResponse } from 'msw'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import { symbol } from './test/fixtures'
 import { server } from './test/server'
@@ -21,6 +21,7 @@ describe('public discovery', () => {
     expect(screen.getByRole('link', { name: 'Search symbols' })).toHaveAttribute('href', '/search')
     const repositoryLink = await screen.findByRole('link', { name: /demo symbols/i })
     expect(repositoryLink).toHaveTextContent('CC BY 4.0')
+    expect(repositoryLink.querySelector('.repository-card__image-plate')).not.toBeNull()
     const grid = document.querySelector<HTMLElement>('.repository-grid')
     expect(grid).not.toBeNull()
     expect(within(grid!).getAllByRole('link')[0]).toHaveTextContent('Demo Symbols')
@@ -179,6 +180,7 @@ describe('public discovery', () => {
 
   it('renders repository metadata, filters, and pagination', async () => {
     const user = userEvent.setup()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const view = renderApp('/repositories/demo')
 
     expect(await screen.findByRole('heading', { name: 'Demo Symbols' })).toBeInTheDocument()
@@ -187,22 +189,28 @@ describe('public discovery', () => {
     expect(await screen.findByRole('button', { name: 'More Symbols' })).toBeInTheDocument()
     expect(document.querySelectorAll('.symbol-card')).toHaveLength(2)
     expect(document.querySelector('.symbol-grid')).toHaveClass('responsive-grid')
+    expect(document.querySelector('.repository-summary')).not.toBeNull()
+    expect(document.querySelector('.repository-controls')).not.toBeNull()
 
     await user.click(screen.getByRole('button', { name: 'More Symbols' }))
     await waitFor(() => expect(document.querySelectorAll('.symbol-card')).toHaveLength(4))
+    expect(consoleError.mock.calls.some((call) => call.some((value) => String(value).includes('same key')))).toBe(false)
     await user.selectOptions(screen.getByLabelText('Filter'), 'skins')
     await waitFor(() => expect(screen.getByLabelText('Filter')).toHaveValue('skins'))
     await expectNoAccessibilityViolations(view.container)
+    consoleError.mockRestore()
   })
 
   it('renders symbol attribution without a public admin handoff', async () => {
-    renderApp('/symbols/demo/hello-a1')
+    const view = renderApp('/symbols/demo/hello-a1')
 
     expect(await screen.findByRole('heading', { name: 'Hello' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Edit Symbol' })).not.toBeInTheDocument()
     expect(screen.queryByText('Actions')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'CC BY 4.0' })).toBeInTheDocument()
     expect(screen.getByText('A person waving hello.')).toBeInTheDocument()
+    expect(document.querySelector('.symbol-detail__media')).not.toBeNull()
+    await expectNoAccessibilityViolations(view.container)
   })
 
   it('shows retryable API failures and an accessible not-found route', async () => {

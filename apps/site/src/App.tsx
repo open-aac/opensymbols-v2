@@ -94,7 +94,7 @@ function RepositoryPage() {
   }, [load])
 
   return (
-    <PageSection>
+    <PageSection className="repository-page">
       <PageState loading={repository.loading} error={repository.error} onRetry={repository.retry}>
         {repository.data && (
           <div className="repository-summary">
@@ -103,7 +103,7 @@ function RepositoryPage() {
               alt=""
               onError={(event) => { event.currentTarget.src = '/open-symbols-mark.svg' }}
             />
-            <div>
+            <div className="repository-summary__content">
               <h1>{repository.data.name}</h1>
               <DescriptionList items={[
                 { term: 'Website', description: repository.data.url ? <a href={repository.data.url}>{repository.data.url}</a> : 'Not supplied' },
@@ -155,7 +155,7 @@ function RepositoryPage() {
       </form>
       <PageState loading={loading} error={error} onRetry={() => void load(true, 0)}>
         <ResponsiveGrid className="symbol-grid">
-          {symbols.map((symbol) => <SymbolCard key={symbol.id} symbol={applySkin(symbol)} />)}
+          {symbols.map((symbol, index) => <SymbolCard key={`${symbol.id}-${index}`} symbol={applySkin(symbol)} />)}
         </ResponsiveGrid>
         {!loading && symbols.length === 0 && <EmptyState heading="No results found" description="Try changing the search or filters." />}
       </PageState>
@@ -173,11 +173,11 @@ function SymbolPage() {
   const symbol = useAsync(() => getSymbol(repoKey, symbolKey), [repoKey, symbolKey])
 
   return (
-    <PageSection>
+    <PageSection className="symbol-page">
       <PageState loading={symbol.loading} error={symbol.error} onRetry={symbol.retry}>
         {symbol.data && (
           <div className="symbol-detail">
-            <div>
+            <div className="symbol-detail__media">
               <h1>{symbol.data.name}</h1>
               <img src={symbol.data.image_url} alt={symbol.data.name} />
             </div>
