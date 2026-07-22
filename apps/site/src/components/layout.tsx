@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { CircleUserRound } from 'lucide-react'
 import { LazyMotion, domAnimation, useReducedMotion } from 'motion/react'
 import * as m from 'motion/react-m'
 import { Link, useLocation } from 'react-router-dom'
-import { useAppAuth } from '../features/authentication'
+import { safeReturnTo, useAppAuth } from '../features/authentication'
 import { ClerkUserControl } from '../features/clerk-user-control'
 import { BrandEndorsement, PageContainer } from './ui'
 import './layout.css'
@@ -32,6 +33,33 @@ function MenuIcon() {
     <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="20" height="20">
       <path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
+  )
+}
+
+function isAuthenticationRoute(pathname: string) {
+  return pathname === '/sign-in' || pathname.startsWith('/sign-in/')
+    || pathname === '/sign-up' || pathname.startsWith('/sign-up/')
+}
+
+function HeaderAccountControl({ account }: { account: ReturnType<typeof useAppAuth> }) {
+  const location = useLocation()
+
+  if (!account.configured) return null
+  if (!account.loaded) return <span className="header-account-slot" aria-hidden="true" />
+  if (account.signedIn) {
+    return <span className="header-account-slot"><ClerkUserControl /></span>
+  }
+  if (isAuthenticationRoute(location.pathname)) return null
+
+  const returnTo = safeReturnTo(`${location.pathname}${location.search}${location.hash}`)
+  const signInPath = `/sign-in?redirect_url=${encodeURIComponent(returnTo)}`
+
+  return (
+    <span className="header-account-slot">
+      <Link className="header-account-link" to={signInPath} aria-label="Sign in">
+        <CircleUserRound aria-hidden="true" focusable="false" size={24} strokeWidth={2} />
+      </Link>
+    </span>
   )
 }
 
@@ -101,7 +129,7 @@ function MobileNavigation({ account }: { account: ReturnType<typeof useAppAuth> 
   return (
     <>
       <div className="mobile-header-actions">
-        {account.configured && account.loaded && account.signedIn && <ClerkUserControl />}
+        <HeaderAccountControl account={account} />
         <button
           ref={triggerRef}
           className="mobile-menu-trigger"
@@ -162,8 +190,6 @@ function MobileNavigation({ account }: { account: ReturnType<typeof useAppAuth> 
             <nav className="mobile-navigation" aria-label="Primary navigation">
               <Link to="/search">Search symbols</Link>
               <Link to="/api">API documentation</Link>
-              {account.configured && account.loaded && !account.signedIn && <Link to="/sign-in">Sign in</Link>}
-              {account.configured && account.loaded && !account.signedIn && <Link to="/sign-up">Create account</Link>}
               {account.configured && account.loaded && account.signedIn && <Link to="/account">Your account</Link>}
             </nav>
           </m.div>
@@ -225,13 +251,13 @@ export function SiteLayout({ children }: { children: ReactNode }) {
           {mobileNavigation
             ? <MobileNavigation account={account} />
             : (
-                <nav className="site-navigation" aria-label="Primary navigation">
-                  <Link to="/search">Search symbols</Link>
-                  <Link to="/api">API documentation</Link>
-                  {account.configured && account.loaded && !account.signedIn && <Link to="/sign-in">Sign in</Link>}
-                  {account.configured && account.loaded && !account.signedIn && <Link to="/sign-up">Create account</Link>}
-                  {account.configured && account.loaded && account.signedIn && <ClerkUserControl />}
-                </nav>
+                <div className="desktop-header-actions">
+                  <nav className="site-navigation" aria-label="Primary navigation">
+                    <Link to="/search">Search symbols</Link>
+                    <Link to="/api">API documentation</Link>
+                  </nav>
+                  <HeaderAccountControl account={account} />
+                </div>
               )}
         </PageContainer>
       </header>
