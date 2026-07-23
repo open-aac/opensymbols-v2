@@ -83,8 +83,28 @@ OpenSymbols user accounts use Clerk when the optional Clerk environment values
 are configured. Public browsing, search, repositories, symbols, and API
 documentation continue to work without Clerk.
 
-For local development, create a Clerk development application that allows
-email verification codes, then copy `.env.example` to `.env` and set:
+The repository is linked to the OpenAAC Clerk application `OpenSymbols`
+(`app_3Gsz79EqtM5nRTQ3BUAdJA4SRyM`). It currently has a development instance;
+a production instance must be created and approved by OpenAAC before a
+production deployment. To connect a local checkout without committing
+credentials:
+
+```sh
+npm install -g clerk
+clerk auth login
+clerk link --app app_3Gsz79EqtM5nRTQ3BUAdJA4SRyM
+cd apps/site
+clerk env pull --app app_3Gsz79EqtM5nRTQ3BUAdJA4SRyM --file ../../.env.local
+clerk doctor
+```
+
+The pulled root `.env.local` file is ignored. Running the pull from `apps/site`
+makes the CLI write the `VITE_CLERK_PUBLISHABLE_KEY` required by this Vite
+application. The file may also contain a Clerk secret key for CLI tooling, but
+Vite exposes only variables with the `VITE_` prefix. Never commit that file or
+reference `CLERK_SECRET_KEY` from client code.
+
+For local development, copy `.env.example` to `.env` and set:
 
 - `VITE_CLERK_PUBLISHABLE_KEY` to the Clerk publishable key.
 - `CLERK_JWT_KEY` to Clerk's PEM-formatted JWT public key. This is server-only.
@@ -95,6 +115,13 @@ In the Clerk dashboard, disable password and social sign-in methods for this
 development application and leave email verification code as the only sign-in
 and sign-up method. Add both local origins if you alternate between `localhost`
 and `127.0.0.1`. Restart `pnpm dev` after changing `.env`.
+
+Development, staging, and production credentials must be owned and installed
+through OpenAAC's approved secret-management process. Keep at least two
+OpenAAC workspace administrators, document account recovery with the
+organization, rotate keys when ownership or access changes, and remove
+personal-workspace access only after another OpenAAC administrator has
+verified sign-up, sign-in, refresh, sign-out, and `/api/app/session`.
 
 The React site owns `/sign-in/*`, `/sign-up/*`, and `/account`. Hono verifies
 short-lived Clerk bearer tokens at `/api/app/session`; it never accepts a Clerk
