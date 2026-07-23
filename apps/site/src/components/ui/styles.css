@@ -4,11 +4,11 @@
   .action {
     display: inline-flex;
     min-width: 44px;
-    min-height: 44px;
+    min-height: var(--control-height);
     align-items: center;
     justify-content: center;
     gap: var(--space-2);
-    padding: 0.65rem 1rem;
+    padding: calc((var(--control-height) - 1.2em - 4px) / 2) 1rem;
     color: var(--color-text);
     background: var(--color-surface);
     border: 2px solid var(--color-border);
@@ -49,13 +49,17 @@
   .field__label { color: var(--color-text); font-weight: 750; }
   .field__hint { max-width: var(--measure-copy); color: var(--color-text-muted); font-size: var(--text-sm); }
   .field__control {
-    min-height: 44px;
     padding: 0.65rem 0.75rem;
     color: var(--color-text);
     background: var(--color-surface);
     border: 2px solid var(--color-border);
     border-radius: var(--radius-sm);
     transition: border-color 150ms ease, background-color 150ms ease;
+  }
+  .field__control:not(textarea) {
+    height: var(--control-height);
+    padding-block: calc((var(--control-height) - 1.2em - 4px) / 2);
+    line-height: 1.2;
   }
   .field__control:hover:not(:disabled) { border-color: var(--color-action); }
   .field__control:disabled { color: var(--color-text-muted); background: var(--color-surface-muted); cursor: not-allowed; }
