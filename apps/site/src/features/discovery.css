@@ -85,6 +85,10 @@
     overflow: hidden;
   }
   .symbol-card:has(.symbol-card__link:hover) { border-color: var(--color-action); }
+  .symbol-card:has(.symbol-card__link:focus-visible) {
+    outline: 3px solid var(--color-focus);
+    outline-offset: 2px;
+  }
   .symbol-card__link {
     display: grid;
     min-height: 100%;
@@ -94,6 +98,7 @@
     border-radius: calc(var(--radius-md) - 2px);
     transition: color 150ms ease, background-color 150ms ease;
   }
+  .symbol-card__link:focus-visible { outline: none; }
   .symbol-card__link:hover { color: var(--color-action-hover); background: var(--color-accent-soft); }
   .symbol-card__link img {
     width: 100%;
@@ -230,6 +235,7 @@
   @media (forced-colors: active) {
     .repository-card, .symbol-card, .discovery-hero, .discovery-about, .request-symbol,
     .repository-summary, .repository-controls, .symbol-detail__media { border: 2px solid ButtonText; }
+    .symbol-card:has(.symbol-card__link:focus-visible) { outline: 3px solid Highlight; }
     .repository-card__image-plate, .symbol-card__link img, .repository-summary > img, .symbol-detail img { border: 1px solid ButtonText; }
   }
 }
