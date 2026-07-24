@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { CircleUserRound } from 'lucide-react'
 import { LazyMotion, domAnimation, useReducedMotion } from 'motion/react'
 import * as m from 'motion/react-m'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { safeReturnTo, useAppAuth } from '../features/authentication'
 import { ClerkUserControl } from '../features/clerk-user-control'
+import { RouteAccessibility } from './route-accessibility'
 import { BrandEndorsement, PageContainer } from './ui'
 import './layout.css'
 
@@ -113,7 +114,7 @@ function MobileNavigation({ account }: { account: ReturnType<typeof useAppAuth> 
   }, [active])
 
   useEffect(() => {
-    if (dialogRef.current?.open) requestClose(true)
+    if (dialogRef.current?.open) requestClose(false)
   }, [location.key, requestClose])
 
   useEffect(() => {
@@ -188,8 +189,8 @@ function MobileNavigation({ account }: { account: ReturnType<typeof useAppAuth> 
               </button>
             </div>
             <nav className="mobile-navigation" aria-label="Primary navigation">
-              <Link to="/search">Search symbols</Link>
-              <Link to="/api">API documentation</Link>
+              <NavLink end to="/search">Search symbols</NavLink>
+              <NavLink end to="/api">API documentation</NavLink>
               {account.configured && account.loaded && account.signedIn && <Link to="/account">Your account</Link>}
             </nav>
           </m.div>
@@ -236,6 +237,7 @@ export function SiteLayout({ children }: { children: ReactNode }) {
   return (
     <div className="site-shell">
       <a className="skip-link" href="#main">Skip to content</a>
+      <RouteAccessibility />
       <header className="site-header site-header--sticky" ref={headerRef}>
         <PageContainer className="site-header__inner">
           <div className="identity-lockup">
@@ -253,8 +255,8 @@ export function SiteLayout({ children }: { children: ReactNode }) {
             : (
                 <div className="desktop-header-actions">
                   <nav className="site-navigation" aria-label="Primary navigation">
-                    <Link to="/search">Search symbols</Link>
-                    <Link to="/api">API documentation</Link>
+                    <NavLink end to="/search">Search symbols</NavLink>
+                    <NavLink end to="/api">API documentation</NavLink>
                   </nav>
                   <HeaderAccountControl account={account} />
                 </div>

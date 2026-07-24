@@ -12,6 +12,7 @@ import {
 import type { InteractiveApiResult } from './api'
 import { SymbolCard } from './components'
 import { SiteLayout } from './components/layout'
+import { usePageTitle } from './components/page-title'
 import {
   Button,
   ButtonLink,
@@ -57,6 +58,7 @@ function RepositoryPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error>()
   const symbols = pages.flat()
+  usePageTitle(repository.data?.name)
 
   function applySkin(symbol: SymbolResult) {
     if (skin === 'default' || !symbol.skins) return symbol
@@ -172,6 +174,7 @@ function RepositoryPage() {
 function SymbolPage() {
   const { repoKey = '', symbolKey = '' } = useParams()
   const symbol = useAsync(() => getSymbol(repoKey, symbolKey), [repoKey, symbolKey])
+  usePageTitle(symbol.data?.name)
 
   return (
     <PageSection className="symbol-page">
