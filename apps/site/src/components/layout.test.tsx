@@ -1,9 +1,9 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { Link, MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { expectNoAccessibilityViolations } from '../test/axe'
-import { AppAuthProvider, type AppAuthValue } from '../features/authentication'
+import { AppAuthProvider, RequireAuthentication, type AppAuthValue } from '../features/authentication'
 import { SiteLayout } from './layout'
 
 vi.mock('../features/clerk-user-control', () => ({
@@ -30,6 +30,7 @@ afterEach(() => {
   document.documentElement.style.removeProperty('--site-header-height')
   document.documentElement.style.overflow = ''
   document.documentElement.dir = ''
+  document.title = ''
   Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal')
   Reflect.deleteProperty(HTMLDialogElement.prototype, 'close')
 })
@@ -97,6 +98,16 @@ function LocationPath() {
   return <span data-testid="location">{useLocation().pathname}</span>
 }
 
+function HistoryControls() {
+  const navigate = useNavigate()
+  return (
+    <>
+      <button type="button" onClick={() => navigate(-1)}>Back</button>
+      <button type="button" onClick={() => navigate(1)}>Forward</button>
+    </>
+  )
+}
+
 describe('site layout', () => {
   it('keeps the shared header sticky and exposes a skip target', async () => {
     vi.stubGlobal('ResizeObserver', HeaderResizeObserver)
@@ -146,6 +157,118 @@ describe('site layout', () => {
     expect(navigation.getByRole('link', { name: 'Search symbols' })).toHaveAttribute('href', '/search')
     expect(navigation.getByRole('link', { name: 'API documentation' })).toHaveAttribute('href', '/api')
     expect(screen.queryByText('Open communication symbols for everyone')).not.toBeInTheDocument()
+  })
+
+  it('sets the initial title without moving focus or announcing a client-side transition', () => {
+    document.title = 'Before render'
+    render(
+      <MemoryRouter initialEntries={['/api']}>
+        <SiteLayout><h1>API documentation</h1></SiteLayout>
+      </MemoryRouter>,
+    )
+
+    expect(document.title).toBe('API documentation | Open Symbols')
+    expect(screen.getByRole('main')).not.toHaveFocus()
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    expect(screen.getByRole('link', { name: 'API documentation' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Search symbols' })).not.toHaveAttribute('aria-current')
+  })
+
+  it('focuses and announces pathname, query, Back, and Forward navigation', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <SiteLayout>
+          <HistoryControls />
+          <Routes>
+            <Route path="/" element={<h1>Home</h1>} />
+            <Route path="/api" element={<h1>API documentation</h1>} />
+            <Route path="/search" element={<h1>Search</h1>} />
+          </Routes>
+        </SiteLayout>
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('link', { name: 'API documentation' }))
+    await waitFor(() => expect(screen.getByRole('main')).toHaveFocus())
+    expect(document.title).toBe('API documentation | Open Symbols')
+    expect(screen.getByRole('status')).toHaveTextContent('API documentation page loaded')
+    expect(screen.getByRole('link', { name: 'API documentation' })).toHaveAttribute('aria-current', 'page')
+
+    await user.click(screen.getByRole('link', { name: 'Search symbols' }))
+    await waitFor(() => expect(document.title).toBe('Search symbols | Open Symbols'))
+    expect(screen.getByRole('main')).toHaveFocus()
+    expect(screen.getByRole('status')).toHaveTextContent('Search page loaded')
+
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() => expect(document.title).toBe('API documentation | Open Symbols'))
+    expect(screen.getByRole('main')).toHaveFocus()
+
+    await user.click(screen.getByRole('button', { name: 'Forward' }))
+    await waitFor(() => expect(document.title).toBe('Search symbols | Open Symbols'))
+    expect(screen.getByRole('main')).toHaveFocus()
+  })
+
+  it('updates query titles without duplicating result counts and ignores hash-only navigation', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/search?q=hello#results']}>
+        <SiteLayout>
+          <Link to="/search?q=world#results">Change query</Link>
+          <Link to="/search?q=world#filters">Jump to filters</Link>
+        </SiteLayout>
+      </MemoryRouter>,
+    )
+
+    expect(document.title).toBe('Search “hello” | Open Symbols')
+    const announcement = screen.getByRole('status')
+    expect(announcement).toBeEmptyDOMElement()
+
+    await user.click(screen.getByRole('link', { name: 'Change query' }))
+    await waitFor(() => expect(document.title).toBe('Search “world” | Open Symbols'))
+    expect(screen.getByRole('main')).toHaveFocus()
+    expect(announcement).toHaveTextContent('Search page loaded')
+    expect(announcement).not.toHaveTextContent(/symbol.*found/i)
+
+    const hashLink = screen.getByRole('link', { name: 'Jump to filters' })
+    await user.click(hashLink)
+    expect(hashLink).toHaveFocus()
+    expect(screen.getByRole('main')).not.toHaveFocus()
+    expect(announcement).toHaveTextContent('Search page loaded')
+  })
+
+  it.each([
+    ['/sign-in/continue', 'Sign in | Open Symbols'],
+    ['/sign-up/continue', 'Create an account | Open Symbols'],
+    ['/account', 'Your dashboard | Open Symbols'],
+    ['/account/characters', 'My Characters | Open Symbols'],
+    ['/account/symbols', 'My Symbols | Open Symbols'],
+    ['/account/packs', 'Symbol Packs | Open Symbols'],
+    ['/account/settings', 'Account settings | Open Symbols'],
+    ['/missing', 'Page not found | Open Symbols'],
+  ])('sets a descriptive title for an initial load at %s', (path, title) => {
+    render(<MemoryRouter initialEntries={[path]}><SiteLayout><h1>Page</h1></SiteLayout></MemoryRouter>)
+    expect(document.title).toBe(title)
+  })
+
+  it('focuses and announces the final authentication destination after a redirect', async () => {
+    render(
+      <MemoryRouter initialEntries={['/account/settings']}>
+        <AppAuthProvider value={signedOut}>
+          <SiteLayout>
+            <Routes>
+              <Route path="/account/*" element={<RequireAuthentication><p>Private account</p></RequireAuthentication>} />
+              <Route path="/sign-in" element={<h1>Sign in</h1>} />
+            </Routes>
+          </SiteLayout>
+        </AppAuthProvider>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+    await waitFor(() => expect(document.title).toBe('Sign in | Open Symbols'))
+    expect(screen.getByRole('main')).toHaveFocus()
+    expect(screen.getByRole('status')).toHaveTextContent('Sign in page loaded')
   })
 
   it('keeps the OpenAAC endorsement usable when its remote badge fails', () => {
@@ -303,32 +426,39 @@ describe('site layout', () => {
     expect(document.documentElement.style.overflow).toBe('')
   })
 
-  it('closes on navigation and renders the signed-in account choices in their intended places', async () => {
-    stubMobileViewport()
-    mockDialog()
-    const user = userEvent.setup()
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <AppAuthProvider value={signedIn}>
-          <SiteLayout>
-            <Routes>
-              <Route path="*" element={<LocationPath />} />
-            </Routes>
-          </SiteLayout>
-        </AppAuthProvider>
-      </MemoryRouter>,
-    )
+  it.each([true, false])(
+    'closes on navigation without restoring Menu focus when reduced motion is %s',
+    async (reducedMotion) => {
+      stubMobileViewport({ reducedMotion })
+      mockDialog()
+      const user = userEvent.setup()
+      render(
+        <MemoryRouter initialEntries={['/']}>
+          <AppAuthProvider value={signedIn}>
+            <SiteLayout>
+              <Routes>
+                <Route path="*" element={<LocationPath />} />
+              </Routes>
+            </SiteLayout>
+          </AppAuthProvider>
+        </MemoryRouter>,
+      )
 
-    expect(screen.getByRole('button', { name: 'Open account menu' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Menu' }))
-    const navigation = screen.getByRole('navigation', { name: 'Primary navigation' })
-    expect(within(navigation).getByRole('link', { name: 'Your account' })).toHaveAttribute('href', '/account')
-    expect(within(navigation).queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Open account menu' })).toBeInTheDocument()
+      const trigger = screen.getByRole('button', { name: 'Menu' })
+      await user.click(trigger)
+      const navigation = screen.getByRole('navigation', { name: 'Primary navigation' })
+      expect(within(navigation).getByRole('link', { name: 'Your account' })).toHaveAttribute('href', '/account')
+      expect(within(navigation).queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument()
 
-    await user.click(within(navigation).getByRole('link', { name: 'Search symbols' }))
-    expect(screen.getByTestId('location')).toHaveTextContent('/search')
-    expect(screen.getByRole('button', { name: 'Menu' })).toHaveAttribute('aria-expanded', 'false')
-  })
+      await user.click(within(navigation).getByRole('link', { name: 'Search symbols' }))
+      expect(screen.getByTestId('location')).toHaveTextContent('/search')
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Menu' })).toHaveAttribute('aria-expanded', 'false'))
+      await waitFor(() => expect(screen.getByRole('main')).toHaveFocus())
+      expect(trigger).not.toHaveFocus()
+      expect(screen.getByRole('status')).toHaveTextContent('Search page loaded')
+    },
+  )
 
   it('closes immediately at the desktop breakpoint and cleans up scroll locking', async () => {
     const viewport = stubMobileViewport()

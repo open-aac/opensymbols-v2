@@ -148,7 +148,7 @@ describe('public discovery', () => {
 
     expect(await screen.findByRole('link', { name: /Hello/ })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Results for “hello”' })).toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('1 symbol found')
+    expect(screen.getByText('1 symbol found', { selector: '.search-results-count' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Suggest a symbol' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Search Google Images' })).toHaveAttribute('href', expect.stringContaining('hello'))
     expect(screen.queryByRole('heading', { name: 'Symbol examples' })).not.toBeInTheDocument()
@@ -269,6 +269,7 @@ describe('public discovery', () => {
     const view = renderApp('/repositories/demo')
 
     expect(await screen.findByRole('heading', { name: 'Demo Symbols' })).toBeInTheDocument()
+    await waitFor(() => expect(document.title).toBe('Demo Symbols | Open Symbols'))
     expect(screen.getByText('Example Designer')).toBeInTheDocument()
     expect(screen.getByLabelText('Skin Tone')).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: 'More Symbols' })).toBeInTheDocument()
@@ -290,6 +291,7 @@ describe('public discovery', () => {
     const view = renderApp('/symbols/demo/hello-a1')
 
     expect(await screen.findByRole('heading', { name: 'Hello' })).toBeInTheDocument()
+    await waitFor(() => expect(document.title).toBe('Hello | Open Symbols'))
     expect(screen.queryByRole('link', { name: 'Edit Symbol' })).not.toBeInTheDocument()
     expect(screen.queryByText('Actions')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'CC BY 4.0' })).toBeInTheDocument()
