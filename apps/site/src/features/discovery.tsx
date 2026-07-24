@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getRepositories, randomSymbols, searchSymbols, submitSymbolRequest } from '../api'
 import { RepositoryCard, SymbolCard } from '../components'
@@ -52,17 +52,43 @@ function SymbolRequest({ query }: { query: string }) {
   const [name, setName] = useState(query)
   const [firstLetter, setFirstLetter] = useState('')
   const [comments, setComments] = useState('')
-  const [status, setStatus] = useState<string>()
+  const [feedback, setFeedback] = useState<{ kind: 'pending' | 'success' | 'error'; message: string }>()
+  const formRef = useRef<HTMLFormElement>(null)
+  const restoreFocusRef = useRef(false)
+
+  useEffect(() => {
+    if (open) {
+      formRef.current?.querySelector<HTMLInputElement>('#request-name')?.focus()
+      return
+    }
+
+    if (restoreFocusRef.current) {
+      restoreFocusRef.current = false
+      document.getElementById('symbol-request-trigger')?.focus()
+    }
+  }, [open])
+
+  function openForm() {
+    if (open) return
+    restoreFocusRef.current = false
+    setFeedback(undefined)
+    setOpen(true)
+  }
+
+  function closeForm() {
+    restoreFocusRef.current = true
+    setOpen(false)
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault()
-    setStatus('Requesting symbol…')
+    setFeedback({ kind: 'pending', message: 'Requesting symbol…' })
     try {
       await submitSymbolRequest({ name, first_letter: firstLetter, comments })
-      setStatus('Symbol request submitted. Thank you!')
-      setOpen(false)
+      setFeedback({ kind: 'success', message: 'Symbol request submitted. Thank you!' })
+      closeForm()
     } catch {
-      setStatus('Request failed. Check the fields and try again.')
+      setFeedback({ kind: 'error', message: 'Request failed. Check the fields and try again.' })
     }
   }
 
@@ -71,22 +97,46 @@ function SymbolRequest({ query }: { query: string }) {
       <h2 id="request-symbol-heading">Still looking?</h2>
       <p>Suggest a symbol for the collection, or search open-licensed images elsewhere.</p>
       <div className="request-actions">
-        <Button variant="secondary" onClick={() => setOpen(true)}>Suggest a symbol</Button>
+        <Button
+          id="symbol-request-trigger"
+          variant="secondary"
+          aria-controls="symbol-request-form"
+          aria-expanded={open}
+          onClick={openForm}
+        >
+          Suggest a symbol
+        </Button>
         <ButtonAnchor variant="quiet" target="_blank" rel="noreferrer" href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(query)}&tbs=sur:fc`}>Search Google Images</ButtonAnchor>
         <ButtonAnchor variant="quiet" target="_blank" rel="noreferrer" href={`https://www.flickr.com/search/?l=cc&ct=0&mt=all&adv=1&q=${encodeURIComponent(query)}`}>Search Flickr</ButtonAnchor>
       </div>
-      {status && <StatusMessage className="request-status" status="status">{status}</StatusMessage>}
+      {!open && feedback?.kind === 'success' && (
+        <StatusMessage className="request-status" status="status">{feedback.message}</StatusMessage>
+      )}
       {open && (
         <Surface className="stacked-form-surface">
-          <form className="stacked-form" onSubmit={submit}>
-            <h3>Request a different symbol</h3>
+          <form
+            ref={formRef}
+            id="symbol-request-form"
+            className="stacked-form"
+            aria-labelledby="symbol-request-form-heading"
+            onSubmit={submit}
+          >
+            <h3 id="symbol-request-form-heading">Request a different symbol</h3>
             <p>Tell us which symbol you would like to see. Requests help symbol donors know where to start.</p>
+            {feedback && feedback.kind !== 'success' && (
+              <StatusMessage
+                className="request-status"
+                status={feedback.kind === 'error' ? 'alert' : 'status'}
+              >
+                {feedback.message}
+              </StatusMessage>
+            )}
             <TextField id="request-name" label="Symbol label" required value={name} onChange={(event) => setName(event.target.value)} />
             <TextField id="request-letter" label="First letter of the symbol label" hint="For example, “b” for “bacon”. This helps prevent automated requests." required maxLength={1} value={firstLetter} onChange={(event) => setFirstLetter(event.target.value)} />
             <TextAreaField id="request-description" label="Description" required rows={4} value={comments} onChange={(event) => setComments(event.target.value)} />
             <FormActions>
               <Button variant="primary" type="submit">Request symbol</Button>
-              <Button type="button" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="button" onClick={closeForm}>Cancel</Button>
             </FormActions>
           </form>
         </Surface>

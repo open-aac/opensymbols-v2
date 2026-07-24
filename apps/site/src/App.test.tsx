@@ -1,4 +1,4 @@
-import { http, HttpResponse } from 'msw'
+import { delay, http, HttpResponse } from 'msw'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -158,18 +158,100 @@ describe('public discovery', () => {
     expect(await screen.findByRole('heading', { name: 'Symbol examples' })).toBeInTheDocument()
   })
 
-  it('submits the legacy honeypot symbol-request form', async () => {
+  it('exposes and manages the symbol-request disclosure for pointer and keyboard users', async () => {
+    const user = userEvent.setup()
+    const view = renderApp('/search?q=bacon')
+
+    const trigger = await screen.findByRole('button', { name: 'Suggest a symbol' })
+    expect(trigger).toHaveAttribute('id', 'symbol-request-trigger')
+    expect(trigger).toHaveAttribute('aria-controls', 'symbol-request-form')
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    await expectNoAccessibilityViolations(view.container)
+
+    await user.click(trigger)
+    const form = screen.getByRole('form', { name: 'Request a different symbol' })
+    const nameField = within(form).getByLabelText('Symbol label')
+    expect(form).toHaveAttribute('id', 'symbol-request-form')
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(nameField).toHaveFocus()
+    await expectNoAccessibilityViolations(view.container)
+
+    await user.click(trigger)
+    expect(screen.getByRole('form', { name: 'Request a different symbol' })).toBe(form)
+
+    await user.click(within(form).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('form', { name: 'Request a different symbol' })).not.toBeInTheDocument()
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    expect(trigger).toHaveFocus()
+
+    await user.keyboard('{Enter}')
+    expect(screen.getByRole('form', { name: 'Request a different symbol' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Symbol label')).toHaveFocus()
+  })
+
+  it('keeps invalid and failed symbol requests open with accessible feedback', async () => {
+    const user = userEvent.setup()
+    let requestCount = 0
+    server.use(http.post('/api/v1/symbols/requests', () => {
+      requestCount += 1
+      return HttpResponse.json({ submitted: true })
+    }))
+    const view = renderApp('/search?q=bacon')
+
+    await user.click(await screen.findByRole('button', { name: 'Suggest a symbol' }))
+    const form = screen.getByRole('form', { name: 'Request a different symbol' })
+    await user.click(within(form).getByRole('button', { name: 'Request symbol' }))
+    expect(requestCount).toBe(0)
+    expect(form).toBeInTheDocument()
+
+    server.use(http.post('/api/v1/symbols/requests', () => {
+      requestCount += 1
+      return HttpResponse.json({ error: 'unavailable' }, { status: 500 })
+    }))
+    await user.type(within(form).getByLabelText(/first letter/i), 'b')
+    await user.type(within(form).getByLabelText('Description'), 'A clear picture of bacon')
+    await user.click(within(form).getByRole('button', { name: 'Request symbol' }))
+
+    expect(await within(form).findByRole('alert')).toHaveTextContent('Request failed')
+    expect(requestCount).toBe(1)
+    expect(screen.getByRole('button', { name: 'Suggest a symbol' })).toHaveAttribute('aria-expanded', 'true')
+    await expectNoAccessibilityViolations(view.container)
+  })
+
+  it('announces symbol-request progress, closes on success, and restores focus', async () => {
+    const user = userEvent.setup()
+    server.use(http.post('/api/v1/symbols/requests', async () => {
+      await delay(50)
+      return HttpResponse.json({ submitted: true })
+    }))
+    renderApp('/search?q=bacon')
+
+    const trigger = await screen.findByRole('button', { name: 'Suggest a symbol' })
+    await user.click(trigger)
+    const form = screen.getByRole('form', { name: 'Request a different symbol' })
+    await user.type(within(form).getByLabelText(/first letter/i), 'b')
+    await user.type(within(form).getByLabelText('Description'), 'A clear picture of bacon')
+    await user.click(within(form).getByRole('button', { name: 'Request symbol' }))
+
+    expect(within(form).getByRole('status')).toHaveTextContent('Requesting symbol')
+    expect(await screen.findByText(/submitted.*thank you/i)).toBeInTheDocument()
+    expect(screen.queryByRole('form', { name: 'Request a different symbol' })).not.toBeInTheDocument()
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    expect(trigger).toHaveFocus()
+  })
+
+  it('does not restore symbol-request focus after route navigation unmounts it', async () => {
     const user = userEvent.setup()
     renderApp('/search?q=bacon')
 
-    await user.click(await screen.findByRole('button', { name: 'Suggest a symbol' }))
-    const form = screen.getByRole('heading', { name: 'Request a different symbol' }).closest('form')
-    expect(form).not.toBeNull()
-    await user.type(within(form!).getByLabelText(/first letter/i), 'b')
-    await user.type(within(form!).getByLabelText('Description'), 'A clear picture of bacon')
-    await user.click(within(form!).getByRole('button', { name: 'Request symbol' }))
+    const trigger = await screen.findByRole('button', { name: 'Suggest a symbol' })
+    await user.click(trigger)
+    expect(screen.getByLabelText('Symbol label')).toHaveFocus()
+    await user.click(screen.getByRole('button', { name: 'Clear search' }))
 
-    expect(await screen.findByText(/submitted.*thank you/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Symbol examples' })).toBeInTheDocument()
+    expect(trigger.isConnected).toBe(false)
+    expect(trigger).not.toHaveFocus()
   })
 
   it('shows setup guidance for an empty database', async () => {
