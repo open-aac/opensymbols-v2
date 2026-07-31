@@ -36,4 +36,34 @@ describe('Meilisearch import client', () => {
       status: 429, retryable: true,
     } satisfies Partial<MeilisearchImportError>)
   })
+
+  it('uploads candidates with build metadata', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ taskUid: 8 }), { status: 202 }),
+    )
+    await new MeilisearchImportClient({
+      host: 'https://example.test', adminApiKey: 'index-key',
+    }, request).uploadSymbolsTo('symbols_candidate_abc', [document], 'opensymbols:abc:1_en')
+    expect(request.mock.calls[0]![0]).toBe(
+      'https://example.test/indexes/symbols_candidate_abc/documents?primaryKey=id&customMetadata=opensymbols%3Aabc%3A1_en',
+    )
+  })
+
+  it('swaps both index pairs in one atomic task', async () => {
+    const request = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ taskUid: 9 }), { status: 202 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'succeeded' }), { status: 200 }))
+    const importer = new MeilisearchImportClient({
+      host: 'https://example.test', adminApiKey: 'index-key',
+    }, request)
+    await importer.swapIndexes([
+      ['symbols', 'symbols_candidate_abc'],
+      ['repositories', 'repositories_candidate_abc'],
+    ])
+    expect(request.mock.calls[0]![0]).toBe('https://example.test/swap-indexes')
+    expect(JSON.parse(String(request.mock.calls[0]![1]!.body))).toEqual([
+      { indexes: ['symbols', 'symbols_candidate_abc'] },
+      { indexes: ['repositories', 'repositories_candidate_abc'] },
+    ])
+  })
 })

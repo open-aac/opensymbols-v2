@@ -28,7 +28,7 @@ export class MeilisearchImportClient {
     this.repositoryIndex = config.repositoryIndex ?? 'repositories'
   }
 
-  private async call(path: string, init: RequestInit = {}) {
+  async call(path: string, init: RequestInit = {}) {
     const response = await this.request(`${this.host}${path}`, {
       ...init,
       headers: {
@@ -42,13 +42,13 @@ export class MeilisearchImportClient {
     return body ? JSON.parse(body) as Record<string, unknown> : {}
   }
 
-  private async task(path: string, body: unknown, method = 'PUT') {
+  async task(path: string, body: unknown, method = 'PUT') {
     const result = await this.call(path, { method, body: JSON.stringify(body) })
     if (typeof result.taskUid !== 'number') throw new Error('Meilisearch did not return a task UID.')
     await this.waitForTask(result.taskUid)
   }
 
-  private async ensureIndex(uid: string) {
+  async ensureIndex(uid: string) {
     try {
       const task = await this.call('/indexes', {
         method: 'POST', body: JSON.stringify({ uid, primaryKey: 'id' }),
@@ -62,20 +62,40 @@ export class MeilisearchImportClient {
   }
 
   async configure() {
-    await this.ensureIndex(this.symbolIndex)
-    await this.ensureIndex(this.repositoryIndex)
-    await this.task(`/indexes/${this.symbolIndex}/settings`, {
+    await this.configureIndexes(this.symbolIndex, this.repositoryIndex)
+  }
+
+  async configureIndexes(symbolIndex: string, repositoryIndex: string) {
+    await this.ensureIndex(symbolIndex)
+    await this.ensureIndex(repositoryIndex)
+    await this.task(`/indexes/${symbolIndex}/settings`, {
       filterableAttributes: [
         'repoKey', 'locale', 'safe', 'visible', 'symbolKey', 'symbolId', 'hasSkin',
       ],
       searchableAttributes: [
         'name', 'description', 'searchTerms', 'synonyms', 'englishName', 'englishDescription', 'text',
       ],
+      rankingRules: ['words', 'typo', 'proximity', 'attribute', 'sort', 'exactness'],
+      typoTolerance: {
+        enabled: true,
+        minWordSizeForTypos: { oneTypo: 5, twoTypos: 9 },
+      },
+      displayedAttributes: [
+        'id', 'symbolId', 'symbolKey', 'repoKey', 'locale', 'safe', 'visible', 'name',
+        'description', 'englishName', 'englishDescription', 'searchTerms', 'synonyms',
+        'keywordBoosts', 'imageUrl', 'enabled', 'protected', 'hasSkin', 'hasVariants',
+        'license', 'licenseUrl', 'author', 'authorUrl', 'sourceUrl', 'extension',
+      ],
       sortableAttributes: ['symbolId'],
       pagination: { maxTotalHits: 120_000 },
     }, 'PATCH')
-    await this.task(`/indexes/${this.repositoryIndex}/settings`, {
+    await this.task(`/indexes/${repositoryIndex}/settings`, {
       filterableAttributes: ['repoKey', 'active', 'protected'],
+      searchableAttributes: ['name', 'description', 'repoKey'],
+      displayedAttributes: [
+        'id', 'repoKey', 'name', 'description', 'active', 'protected', 'license',
+        'licenseUrl', 'author', 'authorUrl', 'url', 'symbolCount',
+      ],
       sortableAttributes: ['name'],
       pagination: { maxTotalHits: 10_000 },
     }, 'PATCH')
@@ -91,6 +111,51 @@ export class MeilisearchImportClient {
     return this.call(`/indexes/${this.repositoryIndex}/documents?primaryKey=id`, {
       method: 'POST', body: JSON.stringify(documents),
     })
+  }
+
+  async uploadSymbolsTo(index: string, documents: SearchDocument[], metadata: string) {
+    return this.call(`/indexes/${index}/documents?primaryKey=id&customMetadata=${encodeURIComponent(metadata)}`, {
+      method: 'POST', body: JSON.stringify(documents),
+    })
+  }
+
+  async uploadRepositoriesTo(index: string, documents: RepositoryDocument[], metadata: string) {
+    return this.call(`/indexes/${index}/documents?primaryKey=id&customMetadata=${encodeURIComponent(metadata)}`, {
+      method: 'POST', body: JSON.stringify(documents),
+    })
+  }
+
+  async searchIndex<T>(index: string, body: Record<string, unknown>) {
+    return this.call(`/indexes/${encodeURIComponent(index)}/search`, {
+      method: 'POST', body: JSON.stringify(body),
+    }) as Promise<{ hits?: T[]; estimatedTotalHits?: number; totalHits?: number }>
+  }
+
+  async documents<T>(index: string, offset: number, limit: number) {
+    return this.call(`/indexes/${encodeURIComponent(index)}/documents?offset=${offset}&limit=${limit}`) as Promise<{
+      results?: T[]
+      total?: number
+    }>
+  }
+
+  async indexes() {
+    return this.call('/indexes?limit=1000') as Promise<{
+      results?: Array<{ uid?: string; createdAt?: string }>
+    }>
+  }
+
+  async swapIndexes(pairs: Array<[string, string]>) {
+    return this.task('/swap-indexes', pairs.map((indexes) => ({ indexes })), 'POST')
+  }
+
+  async deleteIndex(index: string) {
+    const result = await this.call(`/indexes/${encodeURIComponent(index)}`, { method: 'DELETE' })
+    if (typeof result.taskUid !== 'number') throw new Error('Meilisearch did not return a task UID.')
+    await this.waitForTask(result.taskUid)
+  }
+
+  async version() {
+    return this.call('/version') as Promise<{ pkgVersion?: string }>
   }
 
   async waitForTask(taskUid: number, timeoutMs = 300_000) {

@@ -12,6 +12,8 @@ const identity: CheckpointIdentity = {
   host: 'https://example.test',
   symbolIndex: 'symbols',
   symbolIndexCreatedAt: '2026-07-22T12:00:00Z',
+  repositoryIndex: 'repositories',
+  repositoryIndexCreatedAt: '2026-07-22T12:00:01Z',
 }
 
 async function* records() {
@@ -27,7 +29,16 @@ describe('resumable uploads', () => {
     expect(completedForCheckpoint(saved, {
       ...identity, symbolIndexCreatedAt: '2026-07-22T13:00:00Z',
     })).toBe(0)
+    expect(completedForCheckpoint(saved, {
+      ...identity, repositoryIndexCreatedAt: '2026-07-22T13:00:00Z',
+    })).toBe(0)
     expect(completedForCheckpoint({ completed: 1_000 }, identity)).toBe(0)
+  })
+
+  it('records the last acknowledged document without weakening identity checks', () => {
+    const saved = uploadCheckpoint(500, identity, '123_es')
+    expect(saved.lastAcknowledgedDocumentId).toBe('123_es')
+    expect(completedForCheckpoint(saved, identity)).toBe(500)
   })
 
   it('skips acknowledged records and checkpoints only acknowledged batches', async () => {

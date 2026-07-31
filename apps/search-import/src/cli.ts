@@ -6,6 +6,17 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readJsonl } from './jsonl.js'
 import { MeilisearchImportClient, MeilisearchImportError } from './meilisearch.js'
+import { exportPostgresSearchData } from './postgres-export.js'
+import {
+  activateBuild,
+  buildCandidates,
+  cleanupBuild,
+  loadBuild,
+  preflightBuild,
+  rollbackBuild,
+  verifyCandidates,
+  type RebuildConfig,
+} from './rebuild.js'
 import { BENCHMARK_DOCUMENT_COUNT, prepareDataset } from './transform.js'
 import type { RepositoryDocument, SearchDocument } from './types.js'
 import {
@@ -19,6 +30,7 @@ const packageRoot = fileURLToPath(new URL('../', import.meta.url))
 const repositoryRoot = resolve(packageRoot, '../..')
 const defaultDataset = join(repositoryRoot, '.benchmark-data', '100k-seed-42')
 const defaultPrepared = join(repositoryRoot, '.benchmark-data', 'meilisearch-100k-seed-42')
+const defaultSearchData = join(repositoryRoot, '.search-data')
 const PREPARED_ID = 'opensymbols-meilisearch-import-v1'
 
 function option(name: string, fallback?: string) {
@@ -28,8 +40,77 @@ function option(name: string, fallback?: string) {
 
 function requiredEnvironment(name: string) {
   const value = process.env[name]?.trim()
-  if (!value) throw new Error(`${name} is required in .env.benchmark.`)
+  if (!value) throw new Error(`${name} is required in the active environment file.`)
   return value
+}
+
+function rebuildConfig(): RebuildConfig {
+  return {
+    host: requiredEnvironment('MEILISEARCH_HOST'),
+    indexApiKey: requiredEnvironment('MEILISEARCH_INDEX_API_KEY'),
+    documentLimit: Number(requiredEnvironment('MEILISEARCH_DOCUMENT_LIMIT')),
+    stableSymbolIndex: process.env.MEILISEARCH_SYMBOL_INDEX,
+    stableRepositoryIndex: process.env.MEILISEARCH_REPOSITORY_INDEX,
+  }
+}
+
+function inputBuild() {
+  const input = option('input')
+  if (!input) throw new Error('--input is required.')
+  return loadBuild(resolve(repositoryRoot, input))
+}
+
+async function postgresExport() {
+  const snapshotId = option('snapshot-id')
+  if (!snapshotId) throw new Error('--snapshot-id is required.')
+  const output = resolve(repositoryRoot, option('output', join(defaultSearchData, `postgres-${snapshotId}`))!)
+  const result = await exportPostgresSearchData({
+    connectionString: requiredEnvironment('DATABASE_URL'),
+    encryptionKey: requiredEnvironment('SECURE_ENCRYPTION_KEY'),
+    s3Bucket: requiredEnvironment('S3_BUCKET'),
+    s3Cdn: requiredEnvironment('S3_CDN'),
+    snapshotId,
+    outputDirectory: output,
+    force: process.argv.includes('--force'),
+  })
+  console.log(JSON.stringify({ output: result.output, ...result.manifest.counts, buildHash: result.manifest.buildHash }, null, 2))
+  return result
+}
+
+async function indexPreflight() {
+  console.log(JSON.stringify(await preflightBuild(rebuildConfig(), await inputBuild()), null, 2))
+}
+
+async function indexBuild() {
+  console.log(JSON.stringify(await buildCandidates(rebuildConfig(), await inputBuild()), null, 2))
+}
+
+async function indexVerify() {
+  console.log(JSON.stringify(await verifyCandidates(rebuildConfig(), await inputBuild()), null, 2))
+}
+
+async function indexActivate() {
+  console.log(JSON.stringify(await activateBuild(rebuildConfig(), await inputBuild()), null, 2))
+}
+
+async function indexRollback() {
+  console.log(JSON.stringify(await rollbackBuild(rebuildConfig(), await inputBuild()), null, 2))
+}
+
+async function indexCleanup() {
+  const confirmation = option('confirm-build')
+  if (!confirmation) throw new Error('--confirm-build is required.')
+  console.log(JSON.stringify(await cleanupBuild(rebuildConfig(), await inputBuild(), confirmation), null, 2))
+}
+
+async function rebuild() {
+  const exported = await postgresExport()
+  const build = await loadBuild(exported.output)
+  const config = rebuildConfig()
+  console.log(JSON.stringify(await preflightBuild(config, build), null, 2))
+  console.log(JSON.stringify(await buildCandidates(config, build), null, 2))
+  console.log(JSON.stringify(await verifyCandidates(config, build), null, 2))
+  console.log(JSON.stringify({ readyForActivation: build.manifest.buildHash }, null, 2))
 }
 
 function client() {
@@ -146,7 +227,15 @@ async function main() {
   if (command === 'prepare') return prepare()
   if (command === 'import') return importData()
   if (command === 'verify') return verify()
-  throw new Error('Usage: search-import prepare|import|verify')
+  if (command === 'postgres-export') return postgresExport()
+  if (command === 'index-preflight') return indexPreflight()
+  if (command === 'index-build') return indexBuild()
+  if (command === 'index-verify') return indexVerify()
+  if (command === 'index-activate') return indexActivate()
+  if (command === 'index-rollback') return indexRollback()
+  if (command === 'index-cleanup') return indexCleanup()
+  if (command === 'rebuild') return rebuild()
+  throw new Error('Usage: search-import prepare|import|verify|postgres-export|index-preflight|index-build|index-verify|index-activate|index-rollback|index-cleanup|rebuild')
 }
 
 main().catch((error) => {

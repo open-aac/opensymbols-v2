@@ -1,4 +1,4 @@
-export type Locale = 'en' | 'es' | 'fr' | 'de' | 'ar' | 'zh-CN'
+export type Locale = string
 export interface RepositoryRecord {
   repoKey: string
   name: string

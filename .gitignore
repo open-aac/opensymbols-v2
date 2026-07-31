@@ -2,6 +2,7 @@ node_modules/
 dist/
 coverage/
 .benchmark-data/
+.search-data/
 *.log
 .env
 .env.*
