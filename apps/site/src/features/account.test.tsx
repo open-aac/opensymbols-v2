@@ -49,6 +49,7 @@ function renderAccount(path = '/account', auth = authValue()) {
 
 describe('account dashboard', () => {
   it('renders the identity, accessible navigation, overview cards, and initials fallback', async () => {
+    const user = userEvent.setup()
     const view = renderAccount()
 
     expect(screen.getByRole('heading', { name: 'Demo Person' })).toBeVisible()
@@ -61,6 +62,20 @@ describe('account dashboard', () => {
     expect(screen.getByRole('link', { name: 'Symbol Packs' })).toHaveAttribute('href', '/account/packs')
     expect(screen.getByRole('link', { name: 'Explore symbols' })).toHaveAttribute('href', '/search')
     expect(screen.queryByRole('button', { name: /create/i })).not.toBeInTheDocument()
+
+    const accountNavigation = screen.getByRole('navigation', { name: 'Account navigation' })
+    const navigationLinks = within(accountNavigation).getAllByRole('link')
+    expect(navigationLinks.map((link) => link.textContent)).toEqual([
+      'Overview',
+      'My Characters',
+      'My Symbols',
+      'Symbol Packs',
+      'Settings',
+    ])
+    for (const link of navigationLinks) {
+      await user.tab()
+      expect(link).toHaveFocus()
+    }
 
     await waitFor(() => expect(screen.queryByText(/Checking your secure server session/)).not.toBeInTheDocument())
     await expectNoAccessibilityViolations(view.container)
