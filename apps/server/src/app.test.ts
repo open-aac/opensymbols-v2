@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { app, createApp } from './app.js'
+import type { DiscoveryCatalog } from './discovery-catalog.js'
 
 describe('GET /api/health', () => {
   it('reports that the server is healthy', async () => {
@@ -9,6 +10,33 @@ describe('GET /api/health', () => {
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toContain('application/json')
     await expect(response.json()).resolves.toEqual({ status: 'ok' })
+  })
+})
+
+describe('synthetic symbol images', () => {
+  it('serves deterministic immutable SVGs and supported skin tones', async () => {
+    const first = await app.request('/api/synthetic-images/0000001.svg')
+    const repeated = await app.request('/api/synthetic-images/0000001.svg')
+    const tone = await app.request('/api/synthetic-images/0000001-variant-medium-dark.svg')
+    expect(first.status).toBe(200)
+    expect(first.headers.get('content-type')).toContain('image/svg+xml')
+    expect(first.headers.get('cache-control')).toContain('immutable')
+    expect(await first.text()).toBe(await repeated.text())
+    expect(await tone.text()).toContain('#7a4930')
+  })
+
+  it('rejects malformed synthetic image specifications', async () => {
+    expect((await app.request('/api/synthetic-images/not-a-symbol.svg')).status).toBe(404)
+  })
+
+  it('reports discovery catalog failures', async () => {
+    const discoveryCatalog = {
+      provider: 'meilisearch',
+      health: async () => { throw new Error('unavailable') },
+    } as unknown as DiscoveryCatalog
+    const response = await createApp({ discoveryCatalog }).request('/api/health')
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toEqual({ status: 'unavailable' })
   })
 })
 

@@ -27,6 +27,7 @@ describe('public discovery', () => {
     expect(within(grid!).getAllByRole('link')[0]).toHaveTextContent('Demo Symbols')
     expect(screen.getByRole('heading', { name: 'Symbol examples' })).toBeInTheDocument()
     expect(await screen.findByRole('link', { name: /Hello/ })).toBeInTheDocument()
+    expect(screen.getAllByRole('search')).toHaveLength(1)
     expect(screen.getByRole('link', { name: 'Read the API documentation' })).toHaveAttribute('href', '/api')
     expect(
       screen.getByRole('search').compareDocumentPosition(screen.getByRole('heading', { name: 'Symbol examples' }))
