@@ -66,7 +66,8 @@ export function RouteAccessibility() {
     if (previousRoute === undefined || previousRoute === routeKey) return
 
     const completeTransition = () => {
-      document.getElementById('main')?.focus()
+      document.getElementById('main')?.focus({ preventScroll: true })
+      window.scrollTo(0, 0)
       announcementIdRef.current += 1
       setAnnouncement({ id: announcementIdRef.current, message: metadata.announcement })
     }

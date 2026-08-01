@@ -160,6 +160,8 @@ describe('site layout', () => {
   })
 
   it('sets the initial title without moving focus or announcing a client-side transition', () => {
+    const scrollTo = vi.fn()
+    vi.stubGlobal('scrollTo', scrollTo)
     document.title = 'Before render'
     render(
       <MemoryRouter initialEntries={['/api']}>
@@ -170,11 +172,14 @@ describe('site layout', () => {
     expect(document.title).toBe('API documentation | Open Symbols')
     expect(screen.getByRole('main')).not.toHaveFocus()
     expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    expect(scrollTo).not.toHaveBeenCalled()
     expect(screen.getByRole('link', { name: 'API documentation' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: 'Search symbols' })).not.toHaveAttribute('aria-current')
   })
 
   it('focuses and announces pathname, query, Back, and Forward navigation', async () => {
+    const scrollTo = vi.fn()
+    vi.stubGlobal('scrollTo', scrollTo)
     const user = userEvent.setup()
     render(
       <MemoryRouter initialEntries={['/']}>
@@ -188,9 +193,13 @@ describe('site layout', () => {
         </SiteLayout>
       </MemoryRouter>,
     )
+    const main = screen.getByRole('main')
+    const focus = vi.spyOn(main, 'focus')
 
     await user.click(screen.getByRole('link', { name: 'API documentation' }))
-    await waitFor(() => expect(screen.getByRole('main')).toHaveFocus())
+    await waitFor(() => expect(main).toHaveFocus())
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: true })
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0)
     expect(document.title).toBe('API documentation | Open Symbols')
     expect(screen.getByRole('status')).toHaveTextContent('API documentation page loaded')
     expect(screen.getByRole('link', { name: 'API documentation' })).toHaveAttribute('aria-current', 'page')
@@ -207,9 +216,12 @@ describe('site layout', () => {
     await user.click(screen.getByRole('button', { name: 'Forward' }))
     await waitFor(() => expect(document.title).toBe('Search symbols | Open Symbols'))
     expect(screen.getByRole('main')).toHaveFocus()
+    expect(scrollTo).toHaveBeenCalledTimes(4)
   })
 
   it('updates query titles without duplicating result counts and ignores hash-only navigation', async () => {
+    const scrollTo = vi.fn()
+    vi.stubGlobal('scrollTo', scrollTo)
     const user = userEvent.setup()
     render(
       <MemoryRouter initialEntries={['/search?q=hello#results']}>
@@ -229,12 +241,14 @@ describe('site layout', () => {
     expect(screen.getByRole('main')).toHaveFocus()
     expect(announcement).toHaveTextContent('Search page loaded')
     expect(announcement).not.toHaveTextContent(/symbol.*found/i)
+    expect(scrollTo).toHaveBeenCalledTimes(1)
 
     const hashLink = screen.getByRole('link', { name: 'Jump to filters' })
     await user.click(hashLink)
     expect(hashLink).toHaveFocus()
     expect(screen.getByRole('main')).not.toHaveFocus()
     expect(announcement).toHaveTextContent('Search page loaded')
+    expect(scrollTo).toHaveBeenCalledTimes(1)
   })
 
   it.each([
@@ -252,6 +266,8 @@ describe('site layout', () => {
   })
 
   it('focuses and announces the final authentication destination after a redirect', async () => {
+    const scrollTo = vi.fn()
+    vi.stubGlobal('scrollTo', scrollTo)
     render(
       <MemoryRouter initialEntries={['/account/settings']}>
         <AppAuthProvider value={signedOut}>
@@ -269,6 +285,7 @@ describe('site layout', () => {
     await waitFor(() => expect(document.title).toBe('Sign in | Open Symbols'))
     expect(screen.getByRole('main')).toHaveFocus()
     expect(screen.getByRole('status')).toHaveTextContent('Sign in page loaded')
+    expect(scrollTo).toHaveBeenCalledWith(0, 0)
   })
 
   it('keeps the OpenAAC endorsement usable when its remote badge fails', () => {
@@ -429,6 +446,8 @@ describe('site layout', () => {
   it.each([true, false])(
     'closes on navigation without restoring Menu focus when reduced motion is %s',
     async (reducedMotion) => {
+      const scrollTo = vi.fn()
+      vi.stubGlobal('scrollTo', scrollTo)
       stubMobileViewport({ reducedMotion })
       mockDialog()
       const user = userEvent.setup()
@@ -450,13 +469,23 @@ describe('site layout', () => {
       const navigation = screen.getByRole('navigation', { name: 'Primary navigation' })
       expect(within(navigation).getByRole('link', { name: 'Your account' })).toHaveAttribute('href', '/account')
       expect(within(navigation).queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument()
+      const dialog = screen.getByRole('dialog', { name: 'Menu' }) as HTMLDialogElement
+      const close = vi.spyOn(dialog, 'close').mockImplementation(() => undefined)
 
       await user.click(within(navigation).getByRole('link', { name: 'Search symbols' }))
       expect(screen.getByTestId('location')).toHaveTextContent('/search')
+      expect(scrollTo).not.toHaveBeenCalled()
+      await waitFor(() => expect(close).toHaveBeenCalled())
+      expect(scrollTo).not.toHaveBeenCalled()
+
+      dialog.removeAttribute('open')
+      fireEvent(dialog, new Event('close'))
       await waitFor(() => expect(screen.getByRole('button', { name: 'Menu' })).toHaveAttribute('aria-expanded', 'false'))
       await waitFor(() => expect(screen.getByRole('main')).toHaveFocus())
       expect(trigger).not.toHaveFocus()
       expect(screen.getByRole('status')).toHaveTextContent('Search page loaded')
+      expect(scrollTo).toHaveBeenCalledOnce()
+      expect(scrollTo).toHaveBeenCalledWith(0, 0)
     },
   )
 
