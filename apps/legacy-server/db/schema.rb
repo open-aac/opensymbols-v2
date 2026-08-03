@@ -10,10 +10,30 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20220201183159) do
+ActiveRecord::Schema.define(version: 20260803160000) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
+
+  create_table "app_users", id: false, force: :cascade do |t|
+    t.string   "clerk_user_id", null: false
+    t.datetime "created_at",    null: false
+    t.datetime "deleted_at"
+    t.index ["clerk_user_id"], name: "index_app_users_on_clerk_user_id", unique: true, using: :btree
+  end
+
+  create_table "characters", id: :uuid, default: nil, force: :cascade do |t|
+    t.string   "clerk_user_id",                         null: false
+    t.string   "name",                  limit: 80,      null: false
+    t.string   "template_key",                          null: false
+    t.integer  "template_version",                      null: false
+    t.integer  "configuration_version",                 null: false
+    t.jsonb    "settings",              default: {},    null: false
+    t.integer  "revision",              default: 1,     null: false
+    t.datetime "created_at",                            null: false
+    t.datetime "updated_at",                            null: false
+    t.index ["clerk_user_id", "updated_at", "id"], name: "index_characters_on_owner_and_updated_at", using: :btree
+  end
 
   create_table "external_sources", force: :cascade do |t|
     t.text     "settings"
@@ -66,5 +86,7 @@ ActiveRecord::Schema.define(version: 20220201183159) do
     t.datetime "updated_at", null: false
     t.index ["locale", "phrase"], name: "index_symbol_requests_on_locale_and_phrase", using: :btree
   end
+
+  add_foreign_key "characters", "app_users", column: "clerk_user_id", primary_key: "clerk_user_id", on_delete: :cascade
 
 end

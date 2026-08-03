@@ -467,6 +467,10 @@ export function App() {
           path="/account/characters/new"
           element={<RequireAuthentication><CharacterEditorPage /></RequireAuthentication>}
         />
+        <Route
+          path="/account/characters/:characterId/edit"
+          element={<RequireAuthentication><CharacterEditorPage /></RequireAuthentication>}
+        />
         <Route path="/account" element={<RequireAuthentication><AccountLayout /></RequireAuthentication>}>
           <Route index element={<AccountOverviewPage />} />
           <Route path="characters" element={<CharacterLibraryPage />} />

@@ -40,6 +40,10 @@ function routeMetadata(pathname: string, search: string) {
     return { title: formatPageTitle(accountTitle), announcement: `${accountTitle} page loaded` }
   }
 
+  if (/^\/account\/characters\/[^/]+\/edit$/.test(pathname)) {
+    return { title: formatPageTitle('Edit character'), announcement: 'Edit character page loaded' }
+  }
+
   if (pathname.startsWith('/repositories/')) {
     return { title: formatPageTitle('Repository'), announcement: 'Repository page loaded' }
   }

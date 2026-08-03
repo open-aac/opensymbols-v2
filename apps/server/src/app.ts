@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { Hono } from 'hono'
 import { serveStatic } from '@hono/node-server/serve-static'
 import {
@@ -22,6 +23,14 @@ import {
   type PublicApiNonce,
 } from './public-api-auth.js'
 import type { AppSessionVerifier } from './clerk-auth.js'
+import type { ClerkWebhookVerifier } from './clerk-webhook.js'
+import type { CharacterStore } from './character-store.js'
+import {
+  characterResponse,
+  isCharacterId,
+  parseCharacterRevision,
+  parseCharacterWrite,
+} from './character-api.js'
 import type { DiscoveryCatalog } from './discovery-catalog.js'
 import { PostgresDiscoveryCatalog } from './discovery-catalog.js'
 
@@ -40,6 +49,10 @@ export interface AppOptions {
   s3Cdn?: string
   siteRoot?: string
   appSessionVerifier?: AppSessionVerifier
+  clerkWebhookVerifier?: ClerkWebhookVerifier
+  characterStore?: CharacterStore
+  appNow?: () => Date
+  characterId?: () => string
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -53,6 +66,12 @@ export function createApp(options: AppOptions = {}) {
     catalogStore ? new PostgresDiscoveryCatalog(catalogStore, imageOptions) : undefined
   )
   const symbolRequestStore = options.symbolRequestStore ?? options.publicDiscoveryStore
+  const appNow = options.appNow ?? (() => new Date())
+  const characterId = options.characterId ?? randomUUID
+  const privateResponse = (context: { header(name: string, value: string): void }) => {
+    context.header('Cache-Control', 'private, no-store')
+  }
+  const appSession = async (request: Request) => options.appSessionVerifier?.verify(request)
 
   app.get('/api/health', async (context) => {
     try {
@@ -76,7 +95,134 @@ export function createApp(options: AppOptions = {}) {
     return context.json({ user_id: session.userId })
   })
 
+  app.get('/api/app/characters', async (context) => {
+    privateResponse(context)
+    if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
+    const session = await appSession(context.req.raw)
+    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
+    try {
+      const result = await options.characterStore.listCharacters(session.userId, appNow().toISOString())
+      if (result.kind === 'account_deleted') return context.json({ error: 'account_deleted' as const }, 403)
+      return context.json({ characters: result.characters.map(characterResponse) })
+    } catch {
+      return context.json({ error: 'database_unavailable' as const }, 503)
+    }
+  })
+
+  app.post('/api/app/characters', async (context) => {
+    privateResponse(context)
+    if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
+    const session = await appSession(context.req.raw)
+    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
+    let input: unknown
+    try { input = await context.req.json() } catch { return context.json({ error: 'invalid_character' as const }, 422) }
+    const character = parseCharacterWrite(input)
+    if (!character) return context.json({ error: 'invalid_character' as const }, 422)
+    try {
+      const result = await options.characterStore.createCharacter(
+        session.userId,
+        characterId(),
+        character,
+        appNow().toISOString(),
+      )
+      if (result.kind === 'account_deleted') return context.json({ error: 'account_deleted' as const }, 403)
+      if (result.kind !== 'ok') return context.json({ error: 'database_unavailable' as const }, 503)
+      context.header('Location', `/api/app/characters/${result.character.id}`)
+      return context.json({ character: characterResponse(result.character) }, 201)
+    } catch {
+      return context.json({ error: 'database_unavailable' as const }, 503)
+    }
+  })
+
+  app.get('/api/app/characters/:id', async (context) => {
+    privateResponse(context)
+    if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
+    const session = await appSession(context.req.raw)
+    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
+    const id = context.req.param('id')
+    if (!isCharacterId(id)) return context.json({ error: 'not_found' as const }, 404)
+    try {
+      const result = await options.characterStore.findCharacter(session.userId, id, appNow().toISOString())
+      if (result.kind === 'account_deleted') return context.json({ error: 'account_deleted' as const }, 403)
+      if (result.kind === 'not_found') return context.json({ error: 'not_found' as const }, 404)
+      return context.json({ character: characterResponse(result.character) })
+    } catch {
+      return context.json({ error: 'database_unavailable' as const }, 503)
+    }
+  })
+
+  app.patch('/api/app/characters/:id', async (context) => {
+    privateResponse(context)
+    if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
+    const session = await appSession(context.req.raw)
+    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
+    const id = context.req.param('id')
+    if (!isCharacterId(id)) return context.json({ error: 'not_found' as const }, 404)
+    let input: unknown
+    try { input = await context.req.json() } catch { return context.json({ error: 'invalid_character' as const }, 422) }
+    const character = parseCharacterWrite(input)
+    const revision = parseCharacterRevision(input)
+    if (!character || revision === null) return context.json({ error: 'invalid_character' as const }, 422)
+    try {
+      const result = await options.characterStore.updateCharacter(
+        session.userId,
+        id,
+        character,
+        revision,
+        appNow().toISOString(),
+      )
+      if (result.kind === 'account_deleted') return context.json({ error: 'account_deleted' as const }, 403)
+      if (result.kind === 'not_found') return context.json({ error: 'not_found' as const }, 404)
+      if (result.kind === 'conflict') return context.json({ error: 'character_conflict' as const }, 409)
+      return context.json({ character: characterResponse(result.character) })
+    } catch {
+      return context.json({ error: 'database_unavailable' as const }, 503)
+    }
+  })
+
+  app.delete('/api/app/characters/:id', async (context) => {
+    privateResponse(context)
+    if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
+    const session = await appSession(context.req.raw)
+    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
+    const id = context.req.param('id')
+    if (!isCharacterId(id)) return context.json({ error: 'not_found' as const }, 404)
+    try {
+      const result = await options.characterStore.deleteCharacter(session.userId, id, appNow().toISOString())
+      if (result.kind === 'account_deleted') return context.json({ error: 'account_deleted' as const }, 403)
+      if (result.kind === 'not_found') return context.json({ error: 'not_found' as const }, 404)
+      return context.body(null, 204)
+    } catch {
+      return context.json({ error: 'database_unavailable' as const }, 503)
+    }
+  })
+
   app.all('/api/app/*', (context) => context.json({ error: 'not_found' as const }, 404))
+
+  app.post('/api/webhooks/clerk', async (context) => {
+    if (!options.clerkWebhookVerifier) return context.json({ error: 'webhook_unconfigured' as const }, 503)
+    if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
+    let event
+    try {
+      event = await options.clerkWebhookVerifier.verify(context.req.raw)
+    } catch {
+      return context.json({ error: 'invalid_webhook' as const }, 400)
+    }
+    if (event.type !== 'user.deleted') return context.json({ received: true as const })
+    const userId = event.data.id
+    if (!userId) return context.json({ error: 'invalid_webhook' as const }, 400)
+    try {
+      await options.characterStore.deleteClerkUser(userId, appNow().toISOString())
+      return context.json({ received: true as const })
+    } catch {
+      return context.json({ error: 'database_unavailable' as const }, 503)
+    }
+  })
 
   if (catalog || options.publicReadStore) {
     const store = options.publicReadStore
