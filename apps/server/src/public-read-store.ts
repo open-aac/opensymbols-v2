@@ -57,6 +57,7 @@ interface CharacterDatabaseRow extends QueryResultRow {
   settings: {
     skinColour: CharacterRecord['settings']['skinColour']
     hairColour?: CharacterRecord['settings']['hairColour']
+    shirtColour?: CharacterRecord['settings']['shirtColour']
   }
   revision: number
   created_at: Date | string
@@ -435,6 +436,7 @@ export class PostgresPublicReadStore implements PublicApiStore, CharacterStore {
       settings: {
         skinColour: row.settings.skinColour,
         hairColour: row.settings.hairColour ?? 'original',
+        shirtColour: row.settings.shirtColour ?? 'original',
       },
       revision: row.revision,
       createdAt: date(row.created_at),

@@ -7,6 +7,7 @@ export const CHARACTER_NAME_MAX_LENGTH = 80
 
 const skinColours = new Set(['original', 'light', 'medium-light', 'medium', 'medium-dark', 'dark'])
 const hairColours = new Set(['original', 'black', 'dark-brown', 'brown', 'light-brown', 'blond', 'auburn', 'grey', 'white'])
+const shirtColours = new Set(['original', 'black', 'white', 'grey', 'red', 'orange', 'yellow', 'green', 'blue', 'purple'])
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function object(value: unknown): Record<string, unknown> | null {
@@ -23,12 +24,14 @@ export function parseCharacterWrite(value: unknown): CharacterWrite | null {
   const name = typeof input.name === 'string' ? input.name.trim() : ''
   const skinColour = settings.skin_colour
   const hairColour = settings.hair_colour === undefined ? 'original' : settings.hair_colour
+  const shirtColour = settings.shirt_colour === undefined ? 'original' : settings.shirt_colour
   if (!name || name.length > CHARACTER_NAME_MAX_LENGTH) return null
   if (input.template_key !== CHARACTER_TEMPLATE_KEY) return null
   if (input.template_version !== CHARACTER_TEMPLATE_VERSION) return null
   if (input.configuration_version !== CHARACTER_CONFIGURATION_VERSION) return null
   if (typeof skinColour !== 'string' || !skinColours.has(skinColour)) return null
   if (typeof hairColour !== 'string' || !hairColours.has(hairColour)) return null
+  if (typeof shirtColour !== 'string' || !shirtColours.has(shirtColour)) return null
 
   return {
     name,
@@ -38,6 +41,7 @@ export function parseCharacterWrite(value: unknown): CharacterWrite | null {
     settings: {
       skinColour: skinColour as CharacterWrite['settings']['skinColour'],
       hairColour: hairColour as CharacterWrite['settings']['hairColour'],
+      shirtColour: shirtColour as CharacterWrite['settings']['shirtColour'],
     },
   }
 }
@@ -63,6 +67,7 @@ export function characterResponse(character: CharacterRecord) {
     settings: {
       skin_colour: character.settings.skinColour,
       hair_colour: character.settings.hairColour ?? 'original',
+      shirt_colour: character.settings.shirtColour ?? 'original',
     },
     revision: character.revision,
     created_at: character.createdAt,
