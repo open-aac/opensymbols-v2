@@ -12,7 +12,7 @@ import {
   AccountOverviewPage,
   AccountSettingsPage,
 } from './account'
-import { CharacterBuilderPage } from './character-builder'
+import { CharacterEditorPage, CharacterLibraryPage } from './character-builder'
 import { skinColourOptions } from './character-template'
 
 function authValue(overrides: Partial<AppAuthValue> = {}): AppAuthValue {
@@ -35,9 +35,10 @@ function renderAccount(path = '/account', auth = authValue()) {
     <MemoryRouter initialEntries={[path]}>
       <AppAuthProvider value={auth}>
         <Routes>
+          <Route path="/account/characters/new" element={<CharacterEditorPage />} />
           <Route path="/account" element={<AccountLayout />}>
             <Route index element={<AccountOverviewPage />} />
-            <Route path="characters" element={<CharacterBuilderPage />} />
+            <Route path="characters" element={<CharacterLibraryPage />} />
             <Route path="symbols" element={<AccountAreaPage area="symbols" />} />
             <Route path="packs" element={<AccountAreaPage area="packs" />} />
             <Route path="settings" element={<AccountSettingsPage />} />
@@ -98,7 +99,21 @@ describe('account dashboard', () => {
     await expectNoAccessibilityViolations(view.container)
   })
 
-  it('offers an accessible prototype skin-colour preview and releases generated image URLs', async () => {
+  it('presents My Characters as an empty library with one clear creation action', async () => {
+    const view = renderAccount('/account/characters')
+
+    expect(screen.getByRole('heading', { name: 'My characters' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'No characters yet' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'New character' })).toHaveAttribute('href', '/account/characters/new')
+    expect(screen.getAllByRole('link', { name: 'New character' })).toHaveLength(1)
+    expect(screen.getByRole('link', { name: 'My Characters' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+
+    await waitFor(() => expect(screen.queryByText(/Checking your secure server session/)).not.toBeInTheDocument())
+    await expectNoAccessibilityViolations(view.container)
+  })
+
+  it('offers an accessible full editor, keyboard category navigation, and persistent skin selection', async () => {
     const createDescriptor = Object.getOwnPropertyDescriptor(URL, 'createObjectURL')
     const revokeDescriptor = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL')
     const createObjectURL = vi.fn(() => `blob:character-${createObjectURL.mock.calls.length}`)
@@ -107,12 +122,26 @@ describe('account dashboard', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL })
 
     const user = userEvent.setup()
-    const view = renderAccount('/account/characters')
+    const view = renderAccount('/account/characters/new')
 
     try {
-      expect(screen.getByRole('heading', { name: 'Build your character' })).toBeVisible()
+      expect(screen.getByRole('heading', { name: 'New character' })).toBeVisible()
       expect(screen.getByText('Prototype')).toBeVisible()
-      expect(screen.getByRole('link', { name: 'My Characters' })).toHaveAttribute('aria-current', 'page')
+      expect(screen.getByRole('link', { name: 'Exit editor' })).toHaveAttribute('href', '/account/characters')
+      expect(screen.getByRole('button', { name: 'Save character' })).toBeDisabled()
+      expect(screen.getByText('Saving is coming soon.')).toBeVisible()
+      expect(screen.queryByRole('navigation', { name: 'Account navigation' })).not.toBeInTheDocument()
+
+      const tabs = screen.getAllByRole('tab')
+      expect(tabs.map((tab) => tab.textContent)).toEqual([
+        'Skin',
+        'Hair',
+        'Face',
+        'Clothing',
+        'Mobility & body',
+        'Accessories',
+      ])
+      expect(screen.getByRole('tab', { name: 'Skin' })).toHaveAttribute('aria-selected', 'true')
       const radios = screen.getAllByRole('radio')
       expect(radios).toHaveLength(skinColourOptions.length)
       expect(screen.getByRole('radio', { name: 'Artist original' })).toBeChecked()
@@ -124,22 +153,40 @@ describe('account dashboard', () => {
       expect(preview).toHaveAttribute('src', 'blob:character-1')
       expect(screen.getByText('Skin colour: Artist original')).toBeVisible()
 
-      screen.getByRole('radio', { name: 'Artist original' }).focus()
+      const skinTab = screen.getByRole('tab', { name: 'Skin' })
+      skinTab.focus()
       await user.keyboard('{ArrowRight}')
-      expect(screen.getByRole('radio', { name: 'Light' })).toBeChecked()
-      await waitFor(() => expect(preview).toHaveAttribute('src', 'blob:character-2'))
+      const hairTab = screen.getByRole('tab', { name: 'Hair' })
+      expect(hairTab).toHaveFocus()
+      expect(hairTab).toHaveAttribute('aria-selected', 'true')
+      expect(screen.getByRole('tabpanel')).toHaveAccessibleName('Hair')
+      expect(screen.getByRole('heading', { name: 'Hair' })).toBeVisible()
+      expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+
+      await user.keyboard('{End}')
+      expect(screen.getByRole('tab', { name: 'Accessories' })).toHaveFocus()
+      await user.keyboard('{Home}')
+      expect(skinTab).toHaveFocus()
 
       await user.click(screen.getByRole('radio', { name: 'Dark' }))
       expect(screen.getByRole('radio', { name: 'Dark' })).toBeChecked()
-      await waitFor(() => expect(preview).toHaveAttribute('src', 'blob:character-3'))
+      await waitFor(() => expect(preview).toHaveAttribute('src', 'blob:character-2'))
       expect(screen.getByText('Skin colour: Dark')).toBeVisible()
       expect(revokeObjectURL).toHaveBeenCalledWith('blob:character-1')
-      expect(revokeObjectURL).toHaveBeenCalledWith('blob:character-2')
 
-      await waitFor(() => expect(screen.queryByText(/Checking your secure server session/)).not.toBeInTheDocument())
-      await expectNoAccessibilityViolations(view.container)
+      await user.click(hairTab)
+      await user.click(skinTab)
+      expect(screen.getByRole('radio', { name: 'Dark' })).toBeChecked()
+
+      for (const tab of tabs) {
+        await user.click(tab)
+        await expectNoAccessibilityViolations(view.container)
+      }
+
+      await user.click(screen.getByRole('link', { name: 'Exit editor' }))
+      expect(screen.getByRole('heading', { name: 'My characters' })).toBeVisible()
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:character-2')
       view.unmount()
-      expect(revokeObjectURL).toHaveBeenCalledWith('blob:character-3')
     } finally {
       if (createDescriptor) Object.defineProperty(URL, 'createObjectURL', createDescriptor)
       else Reflect.deleteProperty(URL, 'createObjectURL')
