@@ -39,6 +39,7 @@ import {
   AccountOverviewPage,
   AccountSettingsPage,
 } from './features/account'
+import { CharacterBuilderPage } from './features/character-builder'
 import { useAsync } from './hooks'
 import type { SymbolResult } from './types'
 import './app-pages.css'
@@ -464,7 +465,7 @@ export function App() {
         <Route path="/sign-up/*" element={<SignUpPage />} />
         <Route path="/account" element={<RequireAuthentication><AccountLayout /></RequireAuthentication>}>
           <Route index element={<AccountOverviewPage />} />
-          <Route path="characters" element={<AccountAreaPage area="characters" />} />
+          <Route path="characters" element={<CharacterBuilderPage />} />
           <Route path="symbols" element={<AccountAreaPage area="symbols" />} />
           <Route path="packs" element={<AccountAreaPage area="packs" />} />
           <Route path="settings" element={<AccountSettingsPage />} />

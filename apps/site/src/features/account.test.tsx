@@ -12,6 +12,8 @@ import {
   AccountOverviewPage,
   AccountSettingsPage,
 } from './account'
+import { CharacterBuilderPage } from './character-builder'
+import { skinColourOptions } from './character-template'
 
 function authValue(overrides: Partial<AppAuthValue> = {}): AppAuthValue {
   return {
@@ -35,7 +37,7 @@ function renderAccount(path = '/account', auth = authValue()) {
         <Routes>
           <Route path="/account" element={<AccountLayout />}>
             <Route index element={<AccountOverviewPage />} />
-            <Route path="characters" element={<AccountAreaPage area="characters" />} />
+            <Route path="characters" element={<CharacterBuilderPage />} />
             <Route path="symbols" element={<AccountAreaPage area="symbols" />} />
             <Route path="packs" element={<AccountAreaPage area="packs" />} />
             <Route path="settings" element={<AccountSettingsPage />} />
@@ -82,7 +84,6 @@ describe('account dashboard', () => {
   })
 
   it.each([
-    ['/account/characters', 'Characters are coming soon', 'My Characters'],
     ['/account/symbols', 'Personalized symbols are coming soon', 'My Symbols'],
     ['/account/packs', 'Symbol packs are coming soon', 'Symbol Packs'],
   ])('renders the truthful empty state at %s', async (path, heading, activeLink) => {
@@ -95,6 +96,56 @@ describe('account dashboard', () => {
 
     await waitFor(() => expect(screen.queryByText(/Checking your secure server session/)).not.toBeInTheDocument())
     await expectNoAccessibilityViolations(view.container)
+  })
+
+  it('offers an accessible prototype skin-colour preview and releases generated image URLs', async () => {
+    const createDescriptor = Object.getOwnPropertyDescriptor(URL, 'createObjectURL')
+    const revokeDescriptor = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL')
+    const createObjectURL = vi.fn(() => `blob:character-${createObjectURL.mock.calls.length}`)
+    const revokeObjectURL = vi.fn()
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL })
+
+    const user = userEvent.setup()
+    const view = renderAccount('/account/characters')
+
+    try {
+      expect(screen.getByRole('heading', { name: 'Build your character' })).toBeVisible()
+      expect(screen.getByText('Prototype')).toBeVisible()
+      expect(screen.getByRole('link', { name: 'My Characters' })).toHaveAttribute('aria-current', 'page')
+      const radios = screen.getAllByRole('radio')
+      expect(radios).toHaveLength(skinColourOptions.length)
+      expect(screen.getByRole('radio', { name: 'Artist original' })).toBeChecked()
+      expect(screen.getByRole('group', { name: 'Skin colour' })).toHaveAccessibleDescription(
+        'Choose a preset to update every labelled skin region in the character.',
+      )
+
+      const preview = await screen.findByRole('img', { name: 'Prototype character preview' })
+      expect(preview).toHaveAttribute('src', 'blob:character-1')
+      expect(screen.getByText('Skin colour: Artist original')).toBeVisible()
+
+      screen.getByRole('radio', { name: 'Artist original' }).focus()
+      await user.keyboard('{ArrowRight}')
+      expect(screen.getByRole('radio', { name: 'Light' })).toBeChecked()
+      await waitFor(() => expect(preview).toHaveAttribute('src', 'blob:character-2'))
+
+      await user.click(screen.getByRole('radio', { name: 'Dark' }))
+      expect(screen.getByRole('radio', { name: 'Dark' })).toBeChecked()
+      await waitFor(() => expect(preview).toHaveAttribute('src', 'blob:character-3'))
+      expect(screen.getByText('Skin colour: Dark')).toBeVisible()
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:character-1')
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:character-2')
+
+      await waitFor(() => expect(screen.queryByText(/Checking your secure server session/)).not.toBeInTheDocument())
+      await expectNoAccessibilityViolations(view.container)
+      view.unmount()
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:character-3')
+    } finally {
+      if (createDescriptor) Object.defineProperty(URL, 'createObjectURL', createDescriptor)
+      else Reflect.deleteProperty(URL, 'createObjectURL')
+      if (revokeDescriptor) Object.defineProperty(URL, 'revokeObjectURL', revokeDescriptor)
+      else Reflect.deleteProperty(URL, 'revokeObjectURL')
+    }
   })
 
   it('uses the Clerk avatar and exposes account-management actions in settings', async () => {
