@@ -1,6 +1,7 @@
 const unsafeElements = 'script, style, foreignObject, iframe, object, embed, link, animate, animateMotion, animateTransform, set'
 const skinRegionSelector = '[id^="skincolor-"]'
 const hairRegionSelector = '[id^="haircolor-"]'
+const shirtRegionSelector = '[id^="primarycolor-"]'
 const hexColour = /^#[0-9a-f]{6}$/i
 
 export const skinColourOptions = [
@@ -22,6 +23,19 @@ export const hairColourOptions = [
   { id: 'auburn', label: 'Auburn', value: '#8a3f24' },
   { id: 'grey', label: 'Grey', value: '#77736f' },
   { id: 'white', label: 'White', value: '#e8e2d8' },
+] as const
+
+export const shirtColourOptions = [
+  { id: 'original', label: 'Artist original', value: '#af76ed' },
+  { id: 'black', label: 'Black', value: '#222222' },
+  { id: 'white', label: 'White', value: '#f5f5f2' },
+  { id: 'grey', label: 'Grey', value: '#77736f' },
+  { id: 'red', label: 'Red', value: '#c83e4d' },
+  { id: 'orange', label: 'Orange', value: '#d97828' },
+  { id: 'yellow', label: 'Yellow', value: '#d6b84a' },
+  { id: 'green', label: 'Green', value: '#3f7d4a' },
+  { id: 'blue', label: 'Blue', value: '#3f6fb5' },
+  { id: 'purple', label: 'Purple', value: '#7a4eab' },
 ] as const
 
 function containsExternalReference(value: string) {
@@ -55,6 +69,7 @@ export interface CharacterTemplateResult {
   svg: string
   skinRegionCount: number
   hairRegionCount: number
+  shirtRegionCount: number
 }
 
 /**
@@ -63,11 +78,12 @@ export interface CharacterTemplateResult {
  */
 export function applyCharacterColours(
   source: string,
-  colours: { skinColour: string; hairColour: string },
+  colours: { skinColour: string; hairColour: string; shirtColour: string },
 ): CharacterTemplateResult {
-  const { skinColour, hairColour } = colours
+  const { skinColour, hairColour, shirtColour } = colours
   if (!hexColour.test(skinColour)) throw new Error('Skin colour must be a six-digit hexadecimal colour.')
   if (!hexColour.test(hairColour)) throw new Error('Hair colour must be a six-digit hexadecimal colour.')
+  if (!hexColour.test(shirtColour)) throw new Error('Shirt colour must be a six-digit hexadecimal colour.')
 
   const document = new DOMParser().parseFromString(source, 'image/svg+xml')
   if (document.querySelector('parsererror') || document.documentElement.localName !== 'svg') {
@@ -77,15 +93,19 @@ export function applyCharacterColours(
   sanitizeSvg(document)
   const skinRegions = Array.from(document.querySelectorAll<SVGElement>(skinRegionSelector))
   const hairRegions = Array.from(document.querySelectorAll<SVGElement>(hairRegionSelector))
+  const shirtRegions = Array.from(document.querySelectorAll<SVGElement>(shirtRegionSelector))
   if (!skinRegions.length) throw new Error('Character template does not define any skin colour regions.')
   if (!hairRegions.length) throw new Error('Character template does not define any hair colour regions.')
+  if (!shirtRegions.length) throw new Error('Character template does not define any shirt colour regions.')
 
   skinRegions.forEach((region) => region.style.setProperty('fill', skinColour))
   hairRegions.forEach((region) => region.style.setProperty('fill', hairColour))
+  shirtRegions.forEach((region) => region.style.setProperty('fill', shirtColour))
 
   return {
     svg: new XMLSerializer().serializeToString(document.documentElement),
     skinRegionCount: skinRegions.length,
     hairRegionCount: hairRegions.length,
+    shirtRegionCount: shirtRegions.length,
   }
 }

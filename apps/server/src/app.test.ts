@@ -92,7 +92,7 @@ describe('Clerk-owned character API', () => {
     templateKey: 'base-character-prototype',
     templateVersion: 1,
     configurationVersion: 1,
-    settings: { skinColour: 'medium', hairColour: 'dark-brown' },
+    settings: { skinColour: 'medium', hairColour: 'dark-brown', shirtColour: 'green' },
     revision: 1,
     createdAt: '2026-08-03T12:00:00.000Z',
     updatedAt: '2026-08-03T12:00:00.000Z',
@@ -102,7 +102,7 @@ describe('Clerk-owned character API', () => {
     template_key: 'base-character-prototype',
     template_version: 1,
     configuration_version: 1,
-    settings: { skin_colour: 'medium', hair_colour: 'dark-brown' },
+    settings: { skin_colour: 'medium', hair_colour: 'dark-brown', shirt_colour: 'green' },
   }
 
   function setup(overrides: Partial<CharacterStore> = {}) {
@@ -144,7 +144,10 @@ describe('Clerk-owned character API', () => {
     expect(created.status).toBe(201)
     expect(created.headers.get('location')).toBe(`/api/app/characters/${id}`)
     expect(store.createCharacter).toHaveBeenCalledWith(
-      'user_example', id, expect.objectContaining({ name: 'Sam' }), '2026-08-03T12:00:00.000Z',
+      'user_example', id, expect.objectContaining({
+        name: 'Sam',
+        settings: { skinColour: 'medium', hairColour: 'dark-brown', shirtColour: 'green' },
+      }), '2026-08-03T12:00:00.000Z',
     )
   })
 
@@ -155,6 +158,11 @@ describe('Clerk-owned character API', () => {
       method: 'POST',
       headers: { Authorization: 'Bearer valid', 'Content-Type': 'application/json' },
       body: '{}',
+    })).status).toBe(422)
+    expect((await unauthenticated.request('/api/app/characters', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer valid', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...write, settings: { ...write.settings, shirt_colour: 'cyan' } }),
     })).status).toBe(422)
     expect((await unauthenticated.request('/api/app/characters/not-a-uuid', {
       headers: { Authorization: 'Bearer valid' },

@@ -216,7 +216,7 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
         templateKey: 'base-character-prototype',
         templateVersion: 1,
         configurationVersion: 1,
-        settings: { skinColour: 'medium' as const, hairColour: 'brown' as const },
+        settings: { skinColour: 'medium' as const, hairColour: 'brown' as const, shirtColour: 'blue' as const },
       }
       const firstCharacter = await store.createCharacter(
         'user_alex',
@@ -228,7 +228,7 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
       await store.createCharacter(
         'user_alex',
         '10000000-0000-4000-8000-000000000002',
-        { ...characterWrite, name: 'Sam', settings: { skinColour: 'dark', hairColour: 'grey' } },
+        { ...characterWrite, name: 'Sam', settings: { skinColour: 'dark', hairColour: 'grey', shirtColour: 'red' } },
         '2026-08-03T13:00:00.000Z',
       )
       await expect(store.listCharacters('user_alex', '2026-08-03T14:00:00.000Z')).resolves.toMatchObject({
@@ -248,7 +248,7 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
         'user_alex',
         '10000000-0000-4000-8000-000000000003',
         '2026-08-03T14:00:00.000Z',
-      )).resolves.toMatchObject({ kind: 'ok', character: { settings: { hairColour: 'original' } } })
+      )).resolves.toMatchObject({ kind: 'ok', character: { settings: { hairColour: 'original', shirtColour: 'original' } } })
       await expect(store.findCharacter(
         'user_other',
         '10000000-0000-4000-8000-000000000001',

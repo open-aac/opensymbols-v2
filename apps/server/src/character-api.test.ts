@@ -15,7 +15,7 @@ describe('character API contracts', () => {
     template_key: CHARACTER_TEMPLATE_KEY,
     template_version: CHARACTER_TEMPLATE_VERSION,
     configuration_version: CHARACTER_CONFIGURATION_VERSION,
-    settings: { skin_colour: 'medium-dark', hair_colour: 'auburn' },
+    settings: { skin_colour: 'medium-dark', hair_colour: 'auburn', shirt_colour: 'blue' },
   }
 
   it('normalizes valid writes and accepts only known versioned settings', () => {
@@ -24,7 +24,7 @@ describe('character API contracts', () => {
       templateKey: CHARACTER_TEMPLATE_KEY,
       templateVersion: 1,
       configurationVersion: 1,
-      settings: { skinColour: 'medium-dark', hairColour: 'auburn' },
+      settings: { skinColour: 'medium-dark', hairColour: 'auburn', shirtColour: 'blue' },
     })
     expect(parseCharacterWrite({ ...valid, name: ' '.repeat(2) })).toBeNull()
     expect(parseCharacterWrite({ ...valid, name: 'x'.repeat(81) })).toBeNull()
@@ -32,8 +32,10 @@ describe('character API contracts', () => {
     expect(parseCharacterWrite({ ...valid, settings: { skin_colour: 'custom' } })).toBeNull()
     expect(parseCharacterWrite({ ...valid, settings: { skin_colour: 'medium', hair_colour: 'blue' } })).toBeNull()
     expect(parseCharacterWrite({ ...valid, settings: { skin_colour: 'medium', hair_colour: null } })).toBeNull()
+    expect(parseCharacterWrite({ ...valid, settings: { skin_colour: 'medium', hair_colour: 'brown', shirt_colour: 'cyan' } })).toBeNull()
+    expect(parseCharacterWrite({ ...valid, settings: { skin_colour: 'medium', hair_colour: 'brown', shirt_colour: null } })).toBeNull()
     expect(parseCharacterWrite({ ...valid, settings: { skin_colour: 'medium' } })).toMatchObject({
-      settings: { hairColour: 'original' },
+      settings: { hairColour: 'original', shirtColour: 'original' },
     })
     expect(parseCharacterWrite(null)).toBeNull()
   })
@@ -54,7 +56,7 @@ describe('character API contracts', () => {
       templateKey: CHARACTER_TEMPLATE_KEY,
       templateVersion: 1,
       configurationVersion: 1,
-      settings: { skinColour: 'dark', hairColour: 'grey' },
+      settings: { skinColour: 'dark', hairColour: 'grey', shirtColour: 'red' },
       revision: 2,
       createdAt: '2026-08-03T12:00:00.000Z',
       updatedAt: '2026-08-03T13:00:00.000Z',
@@ -64,7 +66,7 @@ describe('character API contracts', () => {
       template_key: CHARACTER_TEMPLATE_KEY,
       template_version: 1,
       configuration_version: 1,
-      settings: { skin_colour: 'dark', hair_colour: 'grey' },
+      settings: { skin_colour: 'dark', hair_colour: 'grey', shirt_colour: 'red' },
       revision: 2,
       created_at: '2026-08-03T12:00:00.000Z',
       updated_at: '2026-08-03T13:00:00.000Z',
