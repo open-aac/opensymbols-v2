@@ -200,10 +200,14 @@ function MobileNavigation({ account }: { account: ReturnType<typeof useAppAuth> 
   )
 }
 
-function useStickyHeaderOffset() {
+function useStickyHeaderOffset(enabled = true) {
   const headerRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
+    if (!enabled) {
+      document.documentElement.style.removeProperty('--site-header-height')
+      return
+    }
     const header = headerRef.current
     if (!header) return
 
@@ -224,21 +228,24 @@ function useStickyHeaderOffset() {
       observer?.disconnect()
       document.documentElement.style.removeProperty('--site-header-height')
     }
-  }, [])
+  }, [enabled])
 
   return headerRef
 }
 
 export function SiteLayout({ children }: { children: ReactNode }) {
   const account = useAppAuth()
-  const headerRef = useStickyHeaderOffset()
+  const location = useLocation()
+  const immersive = location.pathname === '/account/characters/new'
+    && account.configured && account.loaded && account.signedIn
+  const headerRef = useStickyHeaderOffset(!immersive)
   const mobileNavigation = useMobileNavigation()
 
   return (
-    <div className="site-shell">
+    <div className={`site-shell${immersive ? ' site-shell--immersive' : ''}`}>
       <a className="skip-link" href="#main">Skip to content</a>
       <RouteAccessibility />
-      <header className="site-header site-header--sticky" ref={headerRef}>
+      {!immersive && <header className="site-header site-header--sticky" ref={headerRef}>
         <PageContainer className="site-header__inner">
           <div className="identity-lockup">
             <Link className="identity" to="/" aria-label="Open Symbols home">
@@ -262,13 +269,13 @@ export function SiteLayout({ children }: { children: ReactNode }) {
                 </div>
               )}
         </PageContainer>
-      </header>
+      </header>}
       <main id="main" className="min-w-0" tabIndex={-1}>{children}</main>
-      <footer className="site-footer">
+      {!immersive && <footer className="site-footer">
         <PageContainer>
           <p>Open Symbols is <a href="https://github.com/open-aac/opensymbols">open source</a> and powered by <a href="https://www.openaac.org">OpenAAC</a>.</p>
         </PageContainer>
-      </footer>
+      </footer>}
     </div>
   )
 }

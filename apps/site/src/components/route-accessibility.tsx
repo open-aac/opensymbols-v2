@@ -30,6 +30,7 @@ function routeMetadata(pathname: string, search: string) {
   const accountPages: Record<string, string> = {
     '/account': 'Your dashboard',
     '/account/characters': 'My Characters',
+    '/account/characters/new': 'New character',
     '/account/symbols': 'My Symbols',
     '/account/packs': 'Symbol Packs',
     '/account/settings': 'Account settings',
