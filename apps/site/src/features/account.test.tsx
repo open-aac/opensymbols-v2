@@ -145,12 +145,23 @@ describe('account dashboard', () => {
     const view = renderAccount('/account/characters/new')
 
     try {
-      expect(screen.getByRole('heading', { name: 'New character' })).toBeVisible()
+      expect(screen.getByRole('heading', { name: 'New character' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'New character' })).toHaveClass('visually-hidden')
       expect(screen.getByText('Prototype')).toBeVisible()
       expect(screen.getByRole('button', { name: 'Exit editor' })).toBeVisible()
       expect(screen.getByRole('button', { name: 'Save character' })).toBeDisabled()
       expect(screen.getByText('Enter a character name between 1 and 80 characters.')).toBeVisible()
+      expect(screen.getByText('Finish editing the character name before saving.')).toBeVisible()
       expect(screen.queryByRole('navigation', { name: 'Account navigation' })).not.toBeInTheDocument()
+
+      let nameInput = screen.getByRole('textbox', { name: 'Character name' })
+      expect(nameInput).toHaveFocus()
+      await user.click(screen.getByRole('button', { name: 'Cancel' }))
+      expect(screen.getByText('Name your character')).toBeVisible()
+      expect(screen.getByRole('button', { name: 'Edit name' })).toHaveFocus()
+      await user.click(screen.getByRole('button', { name: 'Edit name' }))
+      nameInput = screen.getByRole('textbox', { name: 'Character name' })
+      expect(nameInput).toHaveFocus()
 
       const tabs = screen.getAllByRole('tab')
       expect(tabs.map((tab) => tab.textContent)).toEqual([
@@ -211,14 +222,19 @@ describe('account dashboard', () => {
         await expectNoAccessibilityViolations(view.container)
       }
 
-      await user.type(screen.getByRole('textbox', { name: 'Character name' }), 'Sam')
+      await user.type(nameInput, 'Sam')
+      expect(screen.getByRole('button', { name: 'Save character' })).toBeDisabled()
+      await user.click(screen.getByRole('button', { name: 'Done' }))
+      expect(screen.getByText('Sam')).toBeVisible()
+      expect(screen.getByRole('button', { name: 'Edit name' })).toHaveFocus()
       expect(screen.getByRole('button', { name: 'Save character' })).toBeEnabled()
       await user.click(screen.getByRole('button', { name: 'Save character' }))
       await waitFor(() => expect(createRequest).toHaveBeenCalledWith(expect.objectContaining({
         name: 'Sam',
         settings: { skin_colour: 'dark', hair_colour: 'auburn' },
       })))
-      expect(await screen.findByRole('heading', { name: 'Edit character' })).toBeVisible()
+      expect(await screen.findByRole('heading', { name: 'Edit character' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Edit character' })).toHaveClass('visually-hidden')
       expect(screen.getByRole('status')).toHaveTextContent('Character saved.')
       expect(screen.getByRole('button', { name: 'Save character' })).toBeDisabled()
 
@@ -278,11 +294,54 @@ describe('account dashboard', () => {
     await user.type(screen.getByRole('textbox', { name: 'Character name' }), 'Unsaved')
     await user.click(screen.getByRole('button', { name: 'Exit editor' }))
     expect(confirm).toHaveBeenCalledWith('Leave the character editor? Your unsaved changes will be lost.')
-    expect(screen.getByRole('heading', { name: 'New character' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'New character' })).toBeInTheDocument()
 
     const unload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(unload)
     expect(unload.defaultPrevented).toBe(true)
+  })
+
+  it('edits a saved character name inline with keyboard apply and cancellation', async () => {
+    const user = userEvent.setup()
+    const saved = {
+      id: '10000000-0000-4000-8000-000000000001',
+      name: 'Sam',
+      template_key: 'base-character-prototype',
+      template_version: 1,
+      configuration_version: 1,
+      settings: { skin_colour: 'medium', hair_colour: 'brown' },
+      revision: 1,
+      created_at: '2026-08-03T12:00:00.000Z',
+      updated_at: '2026-08-03T13:00:00.000Z',
+    }
+    server.use(http.get('/api/app/characters/:id', () => HttpResponse.json({ character: saved })))
+    const view = renderAccount(`/account/characters/${saved.id}/edit`)
+
+    expect(await screen.findByText('Sam')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Edit name' }))
+    const nameInput = screen.getByRole('textbox', { name: 'Character name' })
+    expect(nameInput).toHaveFocus()
+    await user.clear(nameInput)
+    await user.type(nameInput, '  Alex  {Enter}')
+    expect(screen.getByText('Alex')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Edit name' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'Save character' })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: 'Edit name' }))
+    await user.clear(screen.getByRole('textbox', { name: 'Character name' }))
+    expect(screen.getByRole('button', { name: 'Done' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save character' })).toBeDisabled()
+    await expectNoAccessibilityViolations(view.container)
+    await user.keyboard('{Escape}')
+    expect(screen.getByText('Alex')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Edit name' })).toHaveFocus()
+
+    await user.click(screen.getByRole('button', { name: 'Edit name' }))
+    await user.clear(screen.getByRole('textbox', { name: 'Character name' }))
+    await user.type(screen.getByRole('textbox', { name: 'Character name' }), 'Discard me')
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByText('Alex')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Edit name' })).toHaveFocus()
   })
 
   it('keeps local edits after a revision conflict and reloads the saved version explicitly', async () => {
@@ -306,18 +365,20 @@ describe('account dashboard', () => {
     )
     const view = renderAccount(`/account/characters/${original.id}/edit`)
 
-    const name = await screen.findByRole('textbox', { name: 'Character name' })
-    await waitFor(() => expect(name).toHaveValue('Sam'))
+    expect(await screen.findByText('Sam')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Edit name' }))
+    const name = screen.getByRole('textbox', { name: 'Character name' })
     await user.clear(name)
     await user.type(name, 'My local edit')
+    await user.click(screen.getByRole('button', { name: 'Done' }))
     await user.click(screen.getByRole('button', { name: 'Save character' }))
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('This character changed elsewhere')
-    expect(name).toHaveValue('My local edit')
+    expect(screen.getByText('My local edit')).toBeVisible()
     await expectNoAccessibilityViolations(view.container)
 
     await user.click(screen.getByRole('button', { name: 'Reload saved character' }))
-    await waitFor(() => expect(name).toHaveValue('Sam from another tab'))
+    await waitFor(() => expect(screen.getByText('Sam from another tab')).toBeVisible())
     expect(screen.getByRole('button', { name: 'Save character' })).toBeDisabled()
   })
 

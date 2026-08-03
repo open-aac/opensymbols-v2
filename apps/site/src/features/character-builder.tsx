@@ -33,7 +33,6 @@ import {
   SectionHeading,
   StatusMessage,
   Surface,
-  TextField,
 } from '../components/ui'
 import { applyCharacterColours, hairColourOptions, skinColourOptions } from './character-template'
 import { useAppAuth } from './authentication'
@@ -346,6 +345,8 @@ export function CharacterEditorPage() {
   const { characterId } = useParams()
   const [activePart, setActivePart] = useState<CharacterPartId>('skin')
   const [name, setName] = useState(blankCharacter.name)
+  const [nameDraft, setNameDraft] = useState(blankCharacter.name)
+  const [editingName, setEditingName] = useState(!characterId)
   const [selectedSkinId, setSelectedSkinId] = useState<CharacterSkinColour>(blankCharacter.skinColour)
   const [selectedHairId, setSelectedHairId] = useState<CharacterHairColour>(blankCharacter.hairColour)
   const [savedCharacter, setSavedCharacter] = useState<SavedCharacter>()
@@ -354,6 +355,8 @@ export function CharacterEditorPage() {
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'error' | 'conflict'>()
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
+  const nameInputRef = useRef<HTMLInputElement>(null)
+  const restoreNameFocus = useRef(false)
   const restoringHistory = useRef(false)
 
   const load = useCallback(async () => {
@@ -364,6 +367,8 @@ export function CharacterEditorPage() {
       const character = await getCharacter(auth.getToken, characterId)
       setSavedCharacter(character)
       setName(character.name)
+      setNameDraft(character.name)
+      setEditingName(false)
       setSelectedSkinId(character.settings.skin_colour)
       setSelectedHairId(character.settings.hair_colour)
     } catch (caught) {
@@ -390,7 +395,18 @@ export function CharacterEditorPage() {
     || selectedSkinId !== baseline.skinColour
     || selectedHairId !== baseline.hairColour
   const valid = name.trim().length > 0 && name.trim().length <= 80
-  const hasUnsavedChanges = dirty && valid
+  const nameDraftValid = nameDraft.trim().length > 0 && nameDraft.trim().length <= 80
+  const hasUnsavedChanges = (dirty && valid) || (editingName && nameDraft !== name)
+
+  useEffect(() => {
+    if (editingName && !loading) nameInputRef.current?.focus()
+  }, [editingName, loading])
+
+  useEffect(() => {
+    if (editingName || !restoreNameFocus.current) return
+    restoreNameFocus.current = false
+    document.getElementById('character-name-edit')?.focus()
+  }, [editingName])
 
   useEffect(() => {
     if (!hasUnsavedChanges) return
@@ -421,6 +437,38 @@ export function CharacterEditorPage() {
   function exitEditor() {
     if (hasUnsavedChanges && !window.confirm('Leave the character editor? Your unsaved changes will be lost.')) return
     navigate('/account/characters')
+  }
+
+  function beginNameEditing() {
+    setNameDraft(name)
+    setSaveStatus(undefined)
+    setEditingName(true)
+  }
+
+  function finishNameEditing() {
+    if (!nameDraftValid) return
+    const nextName = nameDraft.trim()
+    setName(nextName)
+    setNameDraft(nextName)
+    setSaveStatus(undefined)
+    restoreNameFocus.current = true
+    setEditingName(false)
+  }
+
+  function cancelNameEditing() {
+    setNameDraft(name)
+    restoreNameFocus.current = true
+    setEditingName(false)
+  }
+
+  function handleNameKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      finishNameEditing()
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      cancelNameEditing()
+    }
   }
 
   function selectTab(index: number) {
@@ -454,6 +502,8 @@ export function CharacterEditorPage() {
         : await createCharacter(auth.getToken, write)
       setSavedCharacter(character)
       setName(character.name)
+      setNameDraft(character.name)
+      setEditingName(false)
       setSelectedSkinId(character.settings.skin_colour)
       setSelectedHairId(character.settings.hair_colour)
       setSaveStatus('saved')
@@ -465,7 +515,9 @@ export function CharacterEditorPage() {
     }
   }
 
-  const saveHelp = !valid
+  const saveHelp = editingName
+    ? 'Finish editing the character name before saving.'
+    : !valid
     ? 'Enter a character name between 1 and 80 characters.'
     : saving
       ? 'Saving your character.'
@@ -479,23 +531,45 @@ export function CharacterEditorPage() {
         <div className="character-editor__identity"><strong>Open Symbols</strong><Badge>Prototype</Badge></div>
         <div className="character-editor__title">
           <p className="eyebrow">Character builder</p>
-          <h1 id="character-editor-title">{characterId ? 'Edit character' : 'New character'}</h1>
-          <TextField
-            id="character-name"
-            label="Character name"
-            required
-            maxLength={80}
-            value={name}
-            disabled={loading}
-            error={name.length > 80 ? 'Use 80 characters or fewer.' : undefined}
-            onChange={(event) => { setName(event.target.value); setSaveStatus(undefined) }}
-          />
+          <h1 className="visually-hidden" id="character-editor-title">{characterId ? 'Edit character' : 'New character'}</h1>
+          {editingName ? (
+            <div className="character-editor__name-editor">
+              <label className="visually-hidden" htmlFor="character-name">Character name</label>
+              <input
+                ref={nameInputRef}
+                className="field__control character-editor__name-input"
+                id="character-name"
+                required
+                maxLength={80}
+                value={nameDraft}
+                aria-invalid={!nameDraftValid}
+                aria-describedby={!nameDraftValid ? 'character-name-error' : undefined}
+                disabled={loading}
+                onChange={(event) => { setNameDraft(event.target.value); setSaveStatus(undefined) }}
+                onKeyDown={handleNameKeyDown}
+              />
+              <div className="character-editor__name-actions">
+                <Button variant="primary" disabled={!nameDraftValid || loading} onClick={finishNameEditing}>Done</Button>
+                <Button disabled={loading} onClick={cancelNameEditing}>Cancel</Button>
+              </div>
+              {!nameDraftValid && (
+                <span className="field__error" id="character-name-error">Enter a character name between 1 and 80 characters.</span>
+              )}
+            </div>
+          ) : (
+            <div className="character-editor__name-display">
+              <p>{name || 'Name your character'}</p>
+              <Button id="character-name-edit" disabled={loading} onClick={beginNameEditing}>
+                <Pencil aria-hidden="true" focusable="false" size={18} /> Edit name
+              </Button>
+            </div>
+          )}
         </div>
         <div className="character-editor__actions">
           <Button onClick={exitEditor}>
             <ArrowLeft aria-hidden="true" focusable="false" size={20} /> Exit editor
           </Button>
-          <Button variant="primary" disabled={!valid || !dirty || saving || loading} aria-describedby="character-save-help" onClick={() => void save()}>
+          <Button variant="primary" disabled={editingName || !valid || !dirty || saving || loading} aria-describedby="character-save-help" onClick={() => void save()}>
             <Save aria-hidden="true" focusable="false" size={20} />
             {saving ? 'Saving…' : 'Save character'}
           </Button>
