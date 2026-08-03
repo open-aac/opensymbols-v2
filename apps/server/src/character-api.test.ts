@@ -15,7 +15,7 @@ describe('character API contracts', () => {
     template_key: CHARACTER_TEMPLATE_KEY,
     template_version: CHARACTER_TEMPLATE_VERSION,
     configuration_version: CHARACTER_CONFIGURATION_VERSION,
-    settings: { skin_colour: 'medium-dark' },
+    settings: { skin_colour: 'medium-dark', hair_colour: 'auburn' },
   }
 
   it('normalizes valid writes and accepts only known versioned settings', () => {
@@ -24,12 +24,17 @@ describe('character API contracts', () => {
       templateKey: CHARACTER_TEMPLATE_KEY,
       templateVersion: 1,
       configurationVersion: 1,
-      settings: { skinColour: 'medium-dark' },
+      settings: { skinColour: 'medium-dark', hairColour: 'auburn' },
     })
     expect(parseCharacterWrite({ ...valid, name: ' '.repeat(2) })).toBeNull()
     expect(parseCharacterWrite({ ...valid, name: 'x'.repeat(81) })).toBeNull()
     expect(parseCharacterWrite({ ...valid, template_version: 2 })).toBeNull()
     expect(parseCharacterWrite({ ...valid, settings: { skin_colour: 'custom' } })).toBeNull()
+    expect(parseCharacterWrite({ ...valid, settings: { skin_colour: 'medium', hair_colour: 'blue' } })).toBeNull()
+    expect(parseCharacterWrite({ ...valid, settings: { skin_colour: 'medium', hair_colour: null } })).toBeNull()
+    expect(parseCharacterWrite({ ...valid, settings: { skin_colour: 'medium' } })).toMatchObject({
+      settings: { hairColour: 'original' },
+    })
     expect(parseCharacterWrite(null)).toBeNull()
   })
 
@@ -49,7 +54,7 @@ describe('character API contracts', () => {
       templateKey: CHARACTER_TEMPLATE_KEY,
       templateVersion: 1,
       configurationVersion: 1,
-      settings: { skinColour: 'dark' },
+      settings: { skinColour: 'dark', hairColour: 'grey' },
       revision: 2,
       createdAt: '2026-08-03T12:00:00.000Z',
       updatedAt: '2026-08-03T13:00:00.000Z',
@@ -59,7 +64,7 @@ describe('character API contracts', () => {
       template_key: CHARACTER_TEMPLATE_KEY,
       template_version: 1,
       configuration_version: 1,
-      settings: { skin_colour: 'dark' },
+      settings: { skin_colour: 'dark', hair_colour: 'grey' },
       revision: 2,
       created_at: '2026-08-03T12:00:00.000Z',
       updated_at: '2026-08-03T13:00:00.000Z',

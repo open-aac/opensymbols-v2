@@ -23,6 +23,7 @@ export interface AppSessionResponse {
 }
 
 export type CharacterSkinColour = 'original' | 'light' | 'medium-light' | 'medium' | 'medium-dark' | 'dark'
+export type CharacterHairColour = 'original' | 'black' | 'dark-brown' | 'brown' | 'light-brown' | 'blond' | 'auburn' | 'grey' | 'white'
 
 export interface SavedCharacter {
   id: string
@@ -30,7 +31,7 @@ export interface SavedCharacter {
   template_key: 'base-character-prototype'
   template_version: 1
   configuration_version: 1
-  settings: { skin_colour: CharacterSkinColour }
+  settings: { skin_colour: CharacterSkinColour; hair_colour: CharacterHairColour }
   revision: number
   created_at: string
   updated_at: string
@@ -41,7 +42,7 @@ export interface CharacterWrite {
   template_key: 'base-character-prototype'
   template_version: 1
   configuration_version: 1
-  settings: { skin_colour: CharacterSkinColour }
+  settings: { skin_colour: CharacterSkinColour; hair_colour: CharacterHairColour }
 }
 
 export class ApiError extends Error {

@@ -92,7 +92,7 @@ describe('Clerk-owned character API', () => {
     templateKey: 'base-character-prototype',
     templateVersion: 1,
     configurationVersion: 1,
-    settings: { skinColour: 'medium' },
+    settings: { skinColour: 'medium', hairColour: 'dark-brown' },
     revision: 1,
     createdAt: '2026-08-03T12:00:00.000Z',
     updatedAt: '2026-08-03T12:00:00.000Z',
@@ -102,7 +102,7 @@ describe('Clerk-owned character API', () => {
     template_key: 'base-character-prototype',
     template_version: 1,
     configuration_version: 1,
-    settings: { skin_colour: 'medium' },
+    settings: { skin_colour: 'medium', hair_colour: 'dark-brown' },
   }
 
   function setup(overrides: Partial<CharacterStore> = {}) {
