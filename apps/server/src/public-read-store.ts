@@ -54,7 +54,10 @@ interface CharacterDatabaseRow extends QueryResultRow {
   template_key: string
   template_version: number
   configuration_version: number
-  settings: CharacterRecord['settings']
+  settings: {
+    skinColour: CharacterRecord['settings']['skinColour']
+    hairColour?: CharacterRecord['settings']['hairColour']
+  }
   revision: number
   created_at: Date | string
   updated_at: Date | string
@@ -429,7 +432,10 @@ export class PostgresPublicReadStore implements PublicApiStore, CharacterStore {
       templateKey: row.template_key,
       templateVersion: row.template_version,
       configurationVersion: row.configuration_version,
-      settings: row.settings,
+      settings: {
+        skinColour: row.settings.skinColour,
+        hairColour: row.settings.hairColour ?? 'original',
+      },
       revision: row.revision,
       createdAt: date(row.created_at),
       updatedAt: date(row.updated_at),

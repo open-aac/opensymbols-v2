@@ -17,6 +17,7 @@ import {
   getCharacter,
   getCharacters,
   updateCharacter,
+  type CharacterHairColour,
   type CharacterSkinColour,
   type CharacterWrite,
   type SavedCharacter,
@@ -34,13 +35,13 @@ import {
   Surface,
   TextField,
 } from '../components/ui'
-import { applyCharacterSkinColour, skinColourOptions } from './character-template'
+import { applyCharacterColours, hairColourOptions, skinColourOptions } from './character-template'
 import { useAppAuth } from './authentication'
 import './character-builder.css'
 
 const characterParts = [
   { id: 'skin', label: 'Skin', description: 'Choose the skin colour used by every artist-labelled skin region.' },
-  { id: 'hair', label: 'Hair', description: 'Hair styles, textures, and colours will be added here in a later increment.' },
+  { id: 'hair', label: 'Hair', description: 'Choose the colour used by every artist-labelled hair region.' },
   { id: 'face', label: 'Face', description: 'Facial features and expressions will be added here in a later increment.' },
   { id: 'clothing', label: 'Clothing', description: 'Tops, bottoms, footwear, and clothing colours will be added here in a later increment.' },
   { id: 'mobility', label: 'Mobility & body', description: 'Mobility aids, limb differences, and body options will be added here in a later increment.' },
@@ -49,15 +50,23 @@ const characterParts = [
 
 type CharacterPartId = (typeof characterParts)[number]['id']
 
-const blankCharacter = { name: '', skinColour: 'original' as CharacterSkinColour }
+const blankCharacter = {
+  name: '',
+  skinColour: 'original' as CharacterSkinColour,
+  hairColour: 'original' as CharacterHairColour,
+}
 
-function characterWrite(name: string, skinColour: CharacterSkinColour): CharacterWrite {
+function characterWrite(
+  name: string,
+  skinColour: CharacterSkinColour,
+  hairColour: CharacterHairColour,
+): CharacterWrite {
   return {
     name: name.trim(),
     template_key: 'base-character-prototype',
     template_version: 1,
     configuration_version: 1,
-    settings: { skin_colour: skinColour },
+    settings: { skin_colour: skinColour, hair_colour: hairColour },
   }
 }
 
@@ -75,39 +84,92 @@ function useSvgImageSource(imageRef: RefObject<HTMLImageElement | null>, svg?: s
 }
 
 function CharacterArtwork({
-  selectedId,
+  selectedSkinId,
+  selectedHairId,
   name,
   className,
 }: {
-  selectedId: CharacterSkinColour
+  selectedSkinId: CharacterSkinColour
+  selectedHairId: CharacterHairColour
   name: string
   className?: string
 }) {
   const imageRef = useRef<HTMLImageElement>(null)
-  const selected = skinColourOptions.find((option) => option.id === selectedId) ?? skinColourOptions[0]
+  const selectedSkin = skinColourOptions.find((option) => option.id === selectedSkinId) ?? skinColourOptions[0]
+  const selectedHair = hairColourOptions.find((option) => option.id === selectedHairId) ?? hairColourOptions[0]
   const result = useMemo(() => {
     try {
-      return { value: applyCharacterSkinColour(characterTemplate, selected.value) }
+      return {
+        value: applyCharacterColours(characterTemplate, {
+          skinColour: selectedSkin.value,
+          hairColour: selectedHair.value,
+        }),
+      }
     } catch (error) {
       return { error: error instanceof Error ? error : new Error('The character preview could not be prepared.') }
     }
-  }, [selected.value])
+  }, [selectedHair.value, selectedSkin.value])
   useSvgImageSource(imageRef, result.value?.svg)
 
   if (result.error) return <StatusMessage status="alert">The character preview could not be displayed.</StatusMessage>
   return <img className={className} ref={imageRef} alt={`${name || 'New character'} preview`} />
 }
 
-function CharacterPreview({ selectedId, name }: { selectedId: CharacterSkinColour; name: string }) {
-  const selected = skinColourOptions.find((option) => option.id === selectedId) ?? skinColourOptions[0]
+function CharacterPreview({
+  selectedSkinId,
+  selectedHairId,
+  name,
+}: {
+  selectedSkinId: CharacterSkinColour
+  selectedHairId: CharacterHairColour
+  name: string
+}) {
+  const selectedSkin = skinColourOptions.find((option) => option.id === selectedSkinId) ?? skinColourOptions[0]
+  const selectedHair = hairColourOptions.find((option) => option.id === selectedHairId) ?? hairColourOptions[0]
   return (
     <section className="character-editor__preview" aria-labelledby="character-preview-heading">
       <h2 className="visually-hidden" id="character-preview-heading">Character preview</h2>
       <figure>
-        <CharacterArtwork selectedId={selectedId} name={name} />
-        <figcaption aria-live="polite">Skin colour: {selected.label}</figcaption>
+        <CharacterArtwork selectedSkinId={selectedSkinId} selectedHairId={selectedHairId} name={name} />
+        <figcaption aria-live="polite">
+          Skin colour: {selectedSkin.label}. Hair colour: {selectedHair.label}.
+        </figcaption>
       </figure>
     </section>
+  )
+}
+
+function HairColourPanel({
+  selectedId,
+  onChange,
+}: {
+  selectedId: CharacterHairColour
+  onChange: (id: CharacterHairColour) => void
+}) {
+  return (
+    <fieldset aria-describedby="hair-colour-help">
+      <legend>Hair colour</legend>
+      <p id="hair-colour-help">Choose a preset to update every labelled hair region in the character.</p>
+      <div className="character-editor__choices">
+        {hairColourOptions.map((option) => (
+          <label className="character-editor__choice" key={option.id}>
+            <input
+              type="radio"
+              name="character-hair-colour"
+              value={option.id}
+              checked={selectedId === option.id}
+              onChange={() => onChange(option.id)}
+            />
+            <span
+              className="character-editor__swatch"
+              style={{ '--character-swatch': option.value } as CSSProperties}
+              aria-hidden="true"
+            />
+            <span>{option.label}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
   )
 }
 
@@ -234,7 +296,11 @@ export function CharacterLibraryPage() {
           {characters.map((character) => (
             <Surface className="character-card" key={character.id}>
               <div className="character-card__preview">
-                <CharacterArtwork selectedId={character.settings.skin_colour} name={character.name} />
+                <CharacterArtwork
+                  selectedSkinId={character.settings.skin_colour}
+                  selectedHairId={character.settings.hair_colour}
+                  name={character.name}
+                />
               </div>
               <div className="character-card__content">
                 <h3>{character.name}</h3>
@@ -281,6 +347,7 @@ export function CharacterEditorPage() {
   const [activePart, setActivePart] = useState<CharacterPartId>('skin')
   const [name, setName] = useState(blankCharacter.name)
   const [selectedSkinId, setSelectedSkinId] = useState<CharacterSkinColour>(blankCharacter.skinColour)
+  const [selectedHairId, setSelectedHairId] = useState<CharacterHairColour>(blankCharacter.hairColour)
   const [savedCharacter, setSavedCharacter] = useState<SavedCharacter>()
   const [loading, setLoading] = useState(Boolean(characterId))
   const [loadError, setLoadError] = useState<Error>()
@@ -298,6 +365,7 @@ export function CharacterEditorPage() {
       setSavedCharacter(character)
       setName(character.name)
       setSelectedSkinId(character.settings.skin_colour)
+      setSelectedHairId(character.settings.hair_colour)
     } catch (caught) {
       setLoadError(caught as Error)
     } finally {
@@ -312,9 +380,15 @@ export function CharacterEditorPage() {
   }, [load])
 
   const baseline = savedCharacter
-    ? { name: savedCharacter.name, skinColour: savedCharacter.settings.skin_colour }
+    ? {
+        name: savedCharacter.name,
+        skinColour: savedCharacter.settings.skin_colour,
+        hairColour: savedCharacter.settings.hair_colour,
+      }
     : blankCharacter
-  const dirty = name !== baseline.name || selectedSkinId !== baseline.skinColour
+  const dirty = name !== baseline.name
+    || selectedSkinId !== baseline.skinColour
+    || selectedHairId !== baseline.hairColour
   const valid = name.trim().length > 0 && name.trim().length <= 80
   const hasUnsavedChanges = dirty && valid
 
@@ -374,13 +448,14 @@ export function CharacterEditorPage() {
     setSaving(true)
     setSaveStatus(undefined)
     try {
-      const write = characterWrite(name, selectedSkinId)
+      const write = characterWrite(name, selectedSkinId, selectedHairId)
       const character = savedCharacter
         ? await updateCharacter(auth.getToken, savedCharacter.id, write, savedCharacter.revision)
         : await createCharacter(auth.getToken, write)
       setSavedCharacter(character)
       setName(character.name)
       setSelectedSkinId(character.settings.skin_colour)
+      setSelectedHairId(character.settings.hair_colour)
       setSaveStatus('saved')
       if (!characterId) navigate(`/account/characters/${character.id}/edit`, { replace: true })
     } catch (caught) {
@@ -457,7 +532,7 @@ export function CharacterEditorPage() {
             </div>
           </nav>
 
-          <CharacterPreview selectedId={selectedSkinId} name={name} />
+          <CharacterPreview selectedSkinId={selectedSkinId} selectedHairId={selectedHairId} name={name} />
 
           <Surface className="character-editor__options" tone="accent" aria-label="Character options">
             {saveStatus === 'saved' && <StatusMessage status="status">Character saved.</StatusMessage>}
@@ -476,10 +551,12 @@ export function CharacterEditorPage() {
                 role="tabpanel"
                 aria-labelledby={`character-part-${part.id}`}
                 hidden={activePart !== part.id}
-                tabIndex={part.id === 'skin' ? undefined : 0}
+                tabIndex={part.id === 'skin' || part.id === 'hair' ? undefined : 0}
               >
                 {part.id === 'skin' ? (
                   <SkinColourPanel selectedId={selectedSkinId} onChange={(id) => { setSelectedSkinId(id); setSaveStatus(undefined) }} />
+                ) : part.id === 'hair' ? (
+                  <HairColourPanel selectedId={selectedHairId} onChange={(id) => { setSelectedHairId(id); setSaveStatus(undefined) }} />
                 ) : (
                   <div className="character-editor__placeholder">
                     <Badge>Coming soon</Badge><h2>{part.label}</h2><p>{part.description}</p>

@@ -1,5 +1,6 @@
 export interface CharacterSettings {
   skinColour: 'original' | 'light' | 'medium-light' | 'medium' | 'medium-dark' | 'dark'
+  hairColour: 'original' | 'black' | 'dark-brown' | 'brown' | 'light-brown' | 'blond' | 'auburn' | 'grey' | 'white'
 }
 
 export interface CharacterRecord {

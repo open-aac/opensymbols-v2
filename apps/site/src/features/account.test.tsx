@@ -114,7 +114,7 @@ describe('account dashboard', () => {
     await expectNoAccessibilityViolations(view.container)
   })
 
-  it('offers an accessible full editor, keyboard category navigation, and persistent skin selection', async () => {
+  it('offers an accessible full editor, keyboard category navigation, and persistent colour selections', async () => {
     const createDescriptor = Object.getOwnPropertyDescriptor(URL, 'createObjectURL')
     const revokeDescriptor = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL')
     const createObjectURL = vi.fn(() => `blob:character-${createObjectURL.mock.calls.length}`)
@@ -129,7 +129,7 @@ describe('account dashboard', () => {
       template_key: 'base-character-prototype',
       template_version: 1,
       configuration_version: 1,
-      settings: { skin_colour: 'dark' },
+      settings: { skin_colour: 'dark', hair_colour: 'auburn' },
       revision: 1,
       created_at: '2026-08-03T12:00:00.000Z',
       updated_at: '2026-08-03T12:00:00.000Z',
@@ -171,7 +171,7 @@ describe('account dashboard', () => {
 
       const preview = await screen.findByRole('img', { name: 'New character preview' })
       expect(preview).toHaveAttribute('src', 'blob:character-1')
-      expect(screen.getByText('Skin colour: Artist original')).toBeVisible()
+      expect(screen.getByText('Skin colour: Artist original. Hair colour: Artist original.')).toBeVisible()
 
       const skinTab = screen.getByRole('tab', { name: 'Skin' })
       skinTab.focus()
@@ -180,9 +180,16 @@ describe('account dashboard', () => {
       expect(hairTab).toHaveFocus()
       expect(hairTab).toHaveAttribute('aria-selected', 'true')
       expect(screen.getByRole('tabpanel')).toHaveAccessibleName('Hair')
-      expect(screen.getByRole('heading', { name: 'Hair' })).toBeVisible()
-      expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+      expect(screen.getAllByRole('radio')).toHaveLength(9)
+      expect(screen.getByRole('radio', { name: 'Artist original' })).toBeChecked()
+      expect(screen.getByRole('group', { name: 'Hair colour' })).toHaveAccessibleDescription(
+        'Choose a preset to update every labelled hair region in the character.',
+      )
+      await user.click(screen.getByRole('radio', { name: 'Auburn' }))
+      await waitFor(() => expect(preview).toHaveAttribute('src', 'blob:character-2'))
+      expect(screen.getByText('Skin colour: Artist original. Hair colour: Auburn.')).toBeVisible()
 
+      hairTab.focus()
       await user.keyboard('{End}')
       expect(screen.getByRole('tab', { name: 'Accessories' })).toHaveFocus()
       await user.keyboard('{Home}')
@@ -190,11 +197,12 @@ describe('account dashboard', () => {
 
       await user.click(screen.getByRole('radio', { name: 'Dark' }))
       expect(screen.getByRole('radio', { name: 'Dark' })).toBeChecked()
-      await waitFor(() => expect(preview).toHaveAttribute('src', 'blob:character-2'))
-      expect(screen.getByText('Skin colour: Dark')).toBeVisible()
-      expect(revokeObjectURL).toHaveBeenCalledWith('blob:character-1')
+      await waitFor(() => expect(preview).toHaveAttribute('src', 'blob:character-3'))
+      expect(screen.getByText('Skin colour: Dark. Hair colour: Auburn.')).toBeVisible()
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:character-2')
 
       await user.click(hairTab)
+      expect(screen.getByRole('radio', { name: 'Auburn' })).toBeChecked()
       await user.click(skinTab)
       expect(screen.getByRole('radio', { name: 'Dark' })).toBeChecked()
 
@@ -208,7 +216,7 @@ describe('account dashboard', () => {
       await user.click(screen.getByRole('button', { name: 'Save character' }))
       await waitFor(() => expect(createRequest).toHaveBeenCalledWith(expect.objectContaining({
         name: 'Sam',
-        settings: { skin_colour: 'dark' },
+        settings: { skin_colour: 'dark', hair_colour: 'auburn' },
       })))
       expect(await screen.findByRole('heading', { name: 'Edit character' })).toBeVisible()
       expect(screen.getByRole('status')).toHaveTextContent('Character saved.')
@@ -216,7 +224,7 @@ describe('account dashboard', () => {
 
       await user.click(screen.getByRole('button', { name: 'Exit editor' }))
       expect(await screen.findByRole('heading', { name: 'My characters' })).toBeVisible()
-      expect(revokeObjectURL).toHaveBeenCalledWith('blob:character-2')
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:character-3')
       view.unmount()
     } finally {
       if (createDescriptor) Object.defineProperty(URL, 'createObjectURL', createDescriptor)
@@ -234,7 +242,7 @@ describe('account dashboard', () => {
       template_key: 'base-character-prototype',
       template_version: 1,
       configuration_version: 1,
-      settings: { skin_colour: 'medium' },
+      settings: { skin_colour: 'medium', hair_colour: 'brown' },
       revision: 1,
       created_at: '2026-08-03T12:00:00.000Z',
       updated_at: '2026-08-03T13:00:00.000Z',
@@ -285,7 +293,7 @@ describe('account dashboard', () => {
       template_key: 'base-character-prototype',
       template_version: 1,
       configuration_version: 1,
-      settings: { skin_colour: 'medium' },
+      settings: { skin_colour: 'medium', hair_colour: 'brown' },
       revision: 1,
       created_at: '2026-08-03T12:00:00.000Z',
       updated_at: '2026-08-03T13:00:00.000Z',

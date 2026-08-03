@@ -216,7 +216,7 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
         templateKey: 'base-character-prototype',
         templateVersion: 1,
         configurationVersion: 1,
-        settings: { skinColour: 'medium' as const },
+        settings: { skinColour: 'medium' as const, hairColour: 'brown' as const },
       }
       const firstCharacter = await store.createCharacter(
         'user_alex',
@@ -228,13 +228,27 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
       await store.createCharacter(
         'user_alex',
         '10000000-0000-4000-8000-000000000002',
-        { ...characterWrite, name: 'Sam', settings: { skinColour: 'dark' } },
+        { ...characterWrite, name: 'Sam', settings: { skinColour: 'dark', hairColour: 'grey' } },
         '2026-08-03T13:00:00.000Z',
       )
       await expect(store.listCharacters('user_alex', '2026-08-03T14:00:00.000Z')).resolves.toMatchObject({
         kind: 'ok',
         characters: [{ name: 'Sam' }, { name: 'Alex' }],
       })
+      await setup.query(`
+        INSERT INTO characters
+          (id, clerk_user_id, name, template_key, template_version,
+           configuration_version, settings, revision, created_at, updated_at)
+        VALUES
+          ('10000000-0000-4000-8000-000000000003', 'user_alex', 'Legacy',
+           'base-character-prototype', 1, 1, '{"skinColour":"medium"}'::jsonb, 1,
+           '2026-08-03T12:00:00.000Z', '2026-08-03T12:00:00.000Z')
+      `)
+      await expect(store.findCharacter(
+        'user_alex',
+        '10000000-0000-4000-8000-000000000003',
+        '2026-08-03T14:00:00.000Z',
+      )).resolves.toMatchObject({ kind: 'ok', character: { settings: { hairColour: 'original' } } })
       await expect(store.findCharacter(
         'user_other',
         '10000000-0000-4000-8000-000000000001',
@@ -278,7 +292,7 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
         WHERE app_users.clerk_user_id = 'user_alex'
         GROUP BY app_users.deleted_at
       `)
-      expect(rolledBack.rows[0]).toMatchObject({ deleted_at: null, count: '2' })
+      expect(rolledBack.rows[0]).toMatchObject({ deleted_at: null, count: '3' })
       await setup.query('DROP TRIGGER fail_character_delete ON characters; DROP FUNCTION fail_character_delete();')
 
       await store.deleteClerkUser('user_alex', '2026-08-03T16:00:00.000Z')
