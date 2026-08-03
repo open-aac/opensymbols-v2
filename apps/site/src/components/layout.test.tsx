@@ -157,6 +157,21 @@ describe('site layout', () => {
     await expectNoAccessibilityViolations(view.container)
   })
 
+  it('keeps the dedicated shell when editing a saved character', () => {
+    vi.stubGlobal('ResizeObserver', HeaderResizeObserver)
+    render(
+      <MemoryRouter initialEntries={['/account/characters/10000000-0000-4000-8000-000000000001/edit']}>
+        <AppAuthProvider value={signedIn}>
+          <SiteLayout><h1>Edit character</h1></SiteLayout>
+        </AppAuthProvider>
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('main').parentElement).toHaveClass('site-shell--immersive')
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument()
+    expect(document.title).toBe('Edit character | Open Symbols')
+  })
+
   it('presents OpenAAC as a linked endorsement outside primary navigation', () => {
     render(<MemoryRouter><SiteLayout><p>Content</p></SiteLayout></MemoryRouter>)
 
@@ -277,6 +292,7 @@ describe('site layout', () => {
     ['/account', 'Your dashboard | Open Symbols'],
     ['/account/characters', 'My Characters | Open Symbols'],
     ['/account/characters/new', 'New character | Open Symbols'],
+    ['/account/characters/10000000-0000-4000-8000-000000000001/edit', 'Edit character | Open Symbols'],
     ['/account/symbols', 'My Symbols | Open Symbols'],
     ['/account/packs', 'Symbol Packs | Open Symbols'],
     ['/account/settings', 'Account settings | Open Symbols'],

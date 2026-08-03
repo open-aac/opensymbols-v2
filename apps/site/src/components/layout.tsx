@@ -236,7 +236,7 @@ function useStickyHeaderOffset(enabled = true) {
 export function SiteLayout({ children }: { children: ReactNode }) {
   const account = useAppAuth()
   const location = useLocation()
-  const immersive = location.pathname === '/account/characters/new'
+  const immersive = /^\/account\/characters\/(?:new|[^/]+\/edit)$/.test(location.pathname)
     && account.configured && account.loaded && account.signedIn
   const headerRef = useStickyHeaderOffset(!immersive)
   const mobileNavigation = useMobileNavigation()

@@ -36,6 +36,7 @@ function renderAccount(path = '/account', auth = authValue()) {
       <AppAuthProvider value={auth}>
         <Routes>
           <Route path="/account/characters/new" element={<CharacterEditorPage />} />
+          <Route path="/account/characters/:characterId/edit" element={<CharacterEditorPage />} />
           <Route path="/account" element={<AccountLayout />}>
             <Route index element={<AccountOverviewPage />} />
             <Route path="characters" element={<CharacterLibraryPage />} />
@@ -103,7 +104,7 @@ describe('account dashboard', () => {
     const view = renderAccount('/account/characters')
 
     expect(screen.getByRole('heading', { name: 'My characters' })).toBeVisible()
-    expect(screen.getByRole('heading', { name: 'No characters yet' })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'No characters yet' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'New character' })).toHaveAttribute('href', '/account/characters/new')
     expect(screen.getAllByRole('link', { name: 'New character' })).toHaveLength(1)
     expect(screen.getByRole('link', { name: 'My Characters' })).toHaveAttribute('aria-current', 'page')
@@ -122,14 +123,33 @@ describe('account dashboard', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL })
 
     const user = userEvent.setup()
+    const saved = {
+      id: '10000000-0000-4000-8000-000000000001',
+      name: 'Sam',
+      template_key: 'base-character-prototype',
+      template_version: 1,
+      configuration_version: 1,
+      settings: { skin_colour: 'dark' },
+      revision: 1,
+      created_at: '2026-08-03T12:00:00.000Z',
+      updated_at: '2026-08-03T12:00:00.000Z',
+    }
+    const createRequest = vi.fn()
+    server.use(
+      http.post('/api/app/characters', async ({ request }) => {
+        createRequest(await request.json())
+        return HttpResponse.json({ character: saved }, { status: 201 })
+      }),
+      http.get('/api/app/characters/:id', () => HttpResponse.json({ character: saved })),
+    )
     const view = renderAccount('/account/characters/new')
 
     try {
       expect(screen.getByRole('heading', { name: 'New character' })).toBeVisible()
       expect(screen.getByText('Prototype')).toBeVisible()
-      expect(screen.getByRole('link', { name: 'Exit editor' })).toHaveAttribute('href', '/account/characters')
+      expect(screen.getByRole('button', { name: 'Exit editor' })).toBeVisible()
       expect(screen.getByRole('button', { name: 'Save character' })).toBeDisabled()
-      expect(screen.getByText('Saving is coming soon.')).toBeVisible()
+      expect(screen.getByText('Enter a character name between 1 and 80 characters.')).toBeVisible()
       expect(screen.queryByRole('navigation', { name: 'Account navigation' })).not.toBeInTheDocument()
 
       const tabs = screen.getAllByRole('tab')
@@ -149,7 +169,7 @@ describe('account dashboard', () => {
         'Choose a preset to update every labelled skin region in the character.',
       )
 
-      const preview = await screen.findByRole('img', { name: 'Prototype character preview' })
+      const preview = await screen.findByRole('img', { name: 'New character preview' })
       expect(preview).toHaveAttribute('src', 'blob:character-1')
       expect(screen.getByText('Skin colour: Artist original')).toBeVisible()
 
@@ -183,8 +203,19 @@ describe('account dashboard', () => {
         await expectNoAccessibilityViolations(view.container)
       }
 
-      await user.click(screen.getByRole('link', { name: 'Exit editor' }))
-      expect(screen.getByRole('heading', { name: 'My characters' })).toBeVisible()
+      await user.type(screen.getByRole('textbox', { name: 'Character name' }), 'Sam')
+      expect(screen.getByRole('button', { name: 'Save character' })).toBeEnabled()
+      await user.click(screen.getByRole('button', { name: 'Save character' }))
+      await waitFor(() => expect(createRequest).toHaveBeenCalledWith(expect.objectContaining({
+        name: 'Sam',
+        settings: { skin_colour: 'dark' },
+      })))
+      expect(await screen.findByRole('heading', { name: 'Edit character' })).toBeVisible()
+      expect(screen.getByRole('status')).toHaveTextContent('Character saved.')
+      expect(screen.getByRole('button', { name: 'Save character' })).toBeDisabled()
+
+      await user.click(screen.getByRole('button', { name: 'Exit editor' }))
+      expect(await screen.findByRole('heading', { name: 'My characters' })).toBeVisible()
       expect(revokeObjectURL).toHaveBeenCalledWith('blob:character-2')
       view.unmount()
     } finally {
@@ -193,6 +224,93 @@ describe('account dashboard', () => {
       if (revokeDescriptor) Object.defineProperty(URL, 'revokeObjectURL', revokeDescriptor)
       else Reflect.deleteProperty(URL, 'revokeObjectURL')
     }
+  })
+
+  it('lists owned characters and deletes one through a named confirmation dialog', async () => {
+    const user = userEvent.setup()
+    const character = {
+      id: '10000000-0000-4000-8000-000000000001',
+      name: 'Sam',
+      template_key: 'base-character-prototype',
+      template_version: 1,
+      configuration_version: 1,
+      settings: { skin_colour: 'medium' },
+      revision: 1,
+      created_at: '2026-08-03T12:00:00.000Z',
+      updated_at: '2026-08-03T13:00:00.000Z',
+    }
+    const deleted = vi.fn()
+    server.use(
+      http.get('/api/app/characters', () => HttpResponse.json({ characters: [character] })),
+      http.delete('/api/app/characters/:id', () => { deleted(); return new HttpResponse(null, { status: 204 }) }),
+    )
+    const view = renderAccount('/account/characters')
+
+    expect(await screen.findByRole('heading', { name: 'Sam' })).toBeVisible()
+    expect(screen.getByRole('img', { name: 'Sam preview' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Edit' })).toHaveAttribute(
+      'href',
+      '/account/characters/10000000-0000-4000-8000-000000000001/edit',
+    )
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(screen.getByRole('dialog')).toHaveAccessibleName('Delete Sam?')
+    await expectNoAccessibilityViolations(view.container)
+    await user.click(screen.getByRole('button', { name: 'Delete character' }))
+    await waitFor(() => expect(deleted).toHaveBeenCalledOnce())
+    expect(screen.queryByRole('heading', { name: 'Sam' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'New character' })).toHaveFocus()
+  })
+
+  it('protects dirty editor changes when Exit is cancelled', async () => {
+    const confirm = vi.fn(() => false)
+    vi.stubGlobal('confirm', confirm)
+    const user = userEvent.setup()
+    renderAccount('/account/characters/new')
+
+    await user.type(screen.getByRole('textbox', { name: 'Character name' }), 'Unsaved')
+    await user.click(screen.getByRole('button', { name: 'Exit editor' }))
+    expect(confirm).toHaveBeenCalledWith('Leave the character editor? Your unsaved changes will be lost.')
+    expect(screen.getByRole('heading', { name: 'New character' })).toBeVisible()
+
+    const unload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(unload)
+    expect(unload.defaultPrevented).toBe(true)
+  })
+
+  it('keeps local edits after a revision conflict and reloads the saved version explicitly', async () => {
+    const user = userEvent.setup()
+    const original = {
+      id: '10000000-0000-4000-8000-000000000001',
+      name: 'Sam',
+      template_key: 'base-character-prototype',
+      template_version: 1,
+      configuration_version: 1,
+      settings: { skin_colour: 'medium' },
+      revision: 1,
+      created_at: '2026-08-03T12:00:00.000Z',
+      updated_at: '2026-08-03T13:00:00.000Z',
+    }
+    const changed = { ...original, name: 'Sam from another tab', revision: 2, updated_at: '2026-08-03T14:00:00.000Z' }
+    let reads = 0
+    server.use(
+      http.get('/api/app/characters/:id', () => HttpResponse.json({ character: reads++ ? changed : original })),
+      http.patch('/api/app/characters/:id', () => HttpResponse.json({ error: 'character_conflict' }, { status: 409 })),
+    )
+    const view = renderAccount(`/account/characters/${original.id}/edit`)
+
+    const name = await screen.findByRole('textbox', { name: 'Character name' })
+    await waitFor(() => expect(name).toHaveValue('Sam'))
+    await user.clear(name)
+    await user.type(name, 'My local edit')
+    await user.click(screen.getByRole('button', { name: 'Save character' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('This character changed elsewhere')
+    expect(name).toHaveValue('My local edit')
+    await expectNoAccessibilityViolations(view.container)
+
+    await user.click(screen.getByRole('button', { name: 'Reload saved character' }))
+    await waitFor(() => expect(name).toHaveValue('Sam from another tab'))
+    expect(screen.getByRole('button', { name: 'Save character' })).toBeDisabled()
   })
 
   it('uses the Clerk avatar and exposes account-management actions in settings', async () => {
