@@ -9,6 +9,7 @@
     "start": "node dist/index.js",
     "data:generate": "tsx scripts/generate-search-data.ts",
     "data:scale": "tsx scripts/generate-search-data.ts --preset 1m --force",
+    "beta:load": "tsx src/beta-load-cli.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:database": "cross-env RUN_DATABASE_INTEGRATION=1 vitest run src/integration/public-read-store.test.ts"

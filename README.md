@@ -250,6 +250,18 @@ The exporter uses a repeatable-read, read-only PostgreSQL transaction, streams
 symbols by primary key, excludes non-public content before indexing, and never
 writes to the source database.
 
+### Public beta operations
+
+The secret-free [beta launch runbook](docs/operations/beta-launch.md) records
+the approved Railway, Crunchy Bridge, Meilisearch, Clerk, DNS, verification,
+rollback, and cleanup process. Railway build and deployment behavior is kept in
+`railway.toml`. The load acceptance gate uses 20 concurrent workers for ten
+minutes by default:
+
+```sh
+BETA_BASE_URL=https://beta.opensymbols.org pnpm beta:load
+```
+
 ## Verify
 
 ```sh

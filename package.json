@@ -12,6 +12,7 @@
     "dev:apps": "pnpm --parallel --stream --filter @opensymbols/site --filter @opensymbols/server dev",
     "data:generate": "pnpm --filter @opensymbols/server data:generate",
     "data:scale": "pnpm --filter @opensymbols/server data:scale",
+    "beta:load": "pnpm --filter @opensymbols/server beta:load",
     "search:prepare": "pnpm --filter @opensymbols/search-import search-import prepare",
     "search:import": "pnpm --filter @opensymbols/search-import search-import import",
     "search:verify": "pnpm --filter @opensymbols/search-import search-import verify",
