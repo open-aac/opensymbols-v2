@@ -4,6 +4,7 @@ import { createApp } from './app.js'
 import { databaseUrlFromEnvironment } from './database-config.js'
 import { createPostgresPublicReadStore } from './public-read-store.js'
 import { clerkSessionVerifierFromEnvironment } from './clerk-auth.js'
+import { clerkWebhookVerifierFromEnvironment } from './clerk-webhook.js'
 import { discoveryCatalogFromEnvironment } from './discovery-config.js'
 
 const port = Number.parseInt(process.env.PORT ?? '3000', 10)
@@ -24,6 +25,8 @@ const app = createApp({
   publicApiEncryptionKey: process.env.SECURE_ENCRYPTION_KEY,
   ...imageOptions,
   appSessionVerifier: clerkSessionVerifierFromEnvironment(),
+  clerkWebhookVerifier: clerkWebhookVerifierFromEnvironment(),
+  characterStore: publicReadStore,
 })
 
 if (!Number.isInteger(port) || port < 1 || port > 65_535) {

@@ -9,6 +9,7 @@ export const handlers = [
     }
     return HttpResponse.json({ user_id: 'user_demo' })
   }),
+  http.get('/api/app/characters', () => HttpResponse.json({ characters: [] })),
   http.post('/api/v2/token', () => HttpResponse.json({
     access_token: 'token::demo-access-token',
     expires: '2026-07-18T12:00:00Z',

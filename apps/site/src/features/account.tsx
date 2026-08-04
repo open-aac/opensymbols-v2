@@ -29,11 +29,6 @@ const navigation = [
 ]
 
 const areas = {
-  characters: {
-    eyebrow: 'My Characters',
-    title: 'Characters are coming soon',
-    description: 'You will be able to build and save characters that reflect appearance, identity, culture, and mobility needs.',
-  },
   symbols: {
     eyebrow: 'My Symbols',
     title: 'Personalized symbols are coming soon',
@@ -118,16 +113,19 @@ const dashboardAreas = [
     title: 'My Characters',
     to: '/account/characters',
     description: 'Build reusable characters that can represent you, your family, or your community.',
+    status: 'Prototype',
   },
   {
     title: 'My Symbols',
     to: '/account/symbols',
     description: 'Keep the personalized and composed communication symbols that matter to you.',
+    status: 'Coming soon',
   },
   {
     title: 'Symbol Packs',
     to: '/account/packs',
     description: 'Organize symbols into practical sets for boards, lessons, and everyday communication.',
+    status: 'Coming soon',
   },
 ]
 
@@ -142,7 +140,7 @@ export function AccountOverviewPage() {
       <ResponsiveGrid className="account-area-grid">
         {dashboardAreas.map((area) => (
           <CardLink className="account-area-card" key={area.to} to={area.to}>
-            <Badge>Coming soon</Badge>
+            <Badge>{area.status}</Badge>
             <h3>{area.title}</h3>
             <p>{area.description}</p>
             <span className="account-area-card__link">View area <span aria-hidden="true">→</span></span>

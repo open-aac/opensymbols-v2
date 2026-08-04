@@ -60,6 +60,25 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
         );
         CREATE INDEX index_symbol_requests_on_locale_and_phrase
           ON symbol_requests (locale, phrase);
+        CREATE TABLE app_users (
+          clerk_user_id varchar PRIMARY KEY,
+          created_at timestamp NOT NULL,
+          deleted_at timestamp
+        );
+        CREATE TABLE characters (
+          id uuid PRIMARY KEY,
+          clerk_user_id varchar NOT NULL REFERENCES app_users(clerk_user_id) ON DELETE CASCADE,
+          name varchar(80) NOT NULL,
+          template_key varchar NOT NULL,
+          template_version integer NOT NULL,
+          configuration_version integer NOT NULL,
+          settings jsonb NOT NULL DEFAULT '{}'::jsonb,
+          revision integer NOT NULL DEFAULT 1,
+          created_at timestamp NOT NULL,
+          updated_at timestamp NOT NULL
+        );
+        CREATE INDEX index_characters_on_owner_and_updated_at
+          ON characters (clerk_user_id, updated_at, id);
       `)
       await setup.query(
         'INSERT INTO symbol_repositories (repo_key, settings) VALUES ($1, $2)',
@@ -191,6 +210,100 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
       expect(authorizedBody).toHaveLength(50)
       expect(authorizedBody.every((symbol) => symbol.locale === 'es' && symbol.repo_key === 'demo')).toBe(true)
       expect(authorizedBody.some((symbol) => symbol.symbol_key === 'page-3')).toBe(false)
+
+      const characterWrite = {
+        name: 'Alex',
+        templateKey: 'base-character-prototype',
+        templateVersion: 1,
+        configurationVersion: 1,
+        settings: { skinColour: 'medium' as const, hairColour: 'brown' as const, shirtColour: 'blue' as const },
+      }
+      const firstCharacter = await store.createCharacter(
+        'user_alex',
+        '10000000-0000-4000-8000-000000000001',
+        characterWrite,
+        '2026-08-03T12:00:00.000Z',
+      )
+      expect(firstCharacter).toMatchObject({ kind: 'ok', character: { name: 'Alex', revision: 1 } })
+      await store.createCharacter(
+        'user_alex',
+        '10000000-0000-4000-8000-000000000002',
+        { ...characterWrite, name: 'Sam', settings: { skinColour: 'dark', hairColour: 'grey', shirtColour: 'red' } },
+        '2026-08-03T13:00:00.000Z',
+      )
+      await expect(store.listCharacters('user_alex', '2026-08-03T14:00:00.000Z')).resolves.toMatchObject({
+        kind: 'ok',
+        characters: [{ name: 'Sam' }, { name: 'Alex' }],
+      })
+      await setup.query(`
+        INSERT INTO characters
+          (id, clerk_user_id, name, template_key, template_version,
+           configuration_version, settings, revision, created_at, updated_at)
+        VALUES
+          ('10000000-0000-4000-8000-000000000003', 'user_alex', 'Legacy',
+           'base-character-prototype', 1, 1, '{"skinColour":"medium"}'::jsonb, 1,
+           '2026-08-03T12:00:00.000Z', '2026-08-03T12:00:00.000Z')
+      `)
+      await expect(store.findCharacter(
+        'user_alex',
+        '10000000-0000-4000-8000-000000000003',
+        '2026-08-03T14:00:00.000Z',
+      )).resolves.toMatchObject({ kind: 'ok', character: { settings: { hairColour: 'original', shirtColour: 'original' } } })
+      await expect(store.findCharacter(
+        'user_other',
+        '10000000-0000-4000-8000-000000000001',
+        '2026-08-03T14:00:00.000Z',
+      )).resolves.toEqual({ kind: 'not_found' })
+
+      const concurrentUpdates = await Promise.all([
+        store.updateCharacter(
+          'user_alex',
+          '10000000-0000-4000-8000-000000000001',
+          { ...characterWrite, name: 'Alex one' },
+          1,
+          '2026-08-03T14:00:00.000Z',
+        ),
+        store.updateCharacter(
+          'user_alex',
+          '10000000-0000-4000-8000-000000000001',
+          { ...characterWrite, name: 'Alex two' },
+          1,
+          '2026-08-03T14:00:01.000Z',
+        ),
+      ])
+      expect(concurrentUpdates.map((result) => result.kind).sort()).toEqual(['conflict', 'ok'])
+      await expect(store.deleteCharacter(
+        'user_other',
+        '10000000-0000-4000-8000-000000000001',
+        '2026-08-03T15:00:00.000Z',
+      )).resolves.toEqual({ kind: 'not_found' })
+
+      await setup.query(`
+        CREATE FUNCTION fail_character_delete() RETURNS trigger AS $$
+        BEGIN RAISE EXCEPTION 'delete blocked'; END;
+        $$ LANGUAGE plpgsql;
+        CREATE TRIGGER fail_character_delete BEFORE DELETE ON characters
+        FOR EACH ROW EXECUTE FUNCTION fail_character_delete();
+      `)
+      await expect(store.deleteClerkUser('user_alex', '2026-08-03T16:00:00.000Z')).rejects.toThrow()
+      const rolledBack = await setup.query<{ deleted_at: string | null; count: string }>(`
+        SELECT app_users.deleted_at, COUNT(characters.id)::text AS count
+        FROM app_users LEFT JOIN characters USING (clerk_user_id)
+        WHERE app_users.clerk_user_id = 'user_alex'
+        GROUP BY app_users.deleted_at
+      `)
+      expect(rolledBack.rows[0]).toMatchObject({ deleted_at: null, count: '3' })
+      await setup.query('DROP TRIGGER fail_character_delete ON characters; DROP FUNCTION fail_character_delete();')
+
+      await store.deleteClerkUser('user_alex', '2026-08-03T16:00:00.000Z')
+      await store.deleteClerkUser('user_alex', '2026-08-03T16:00:01.000Z')
+      await expect(store.listCharacters('user_alex', '2026-08-03T17:00:00.000Z')).resolves.toEqual({
+        kind: 'account_deleted',
+      })
+      const deletedCharacterCount = await setup.query<{ count: string }>(
+        "SELECT COUNT(*)::text AS count FROM characters WHERE clerk_user_id = 'user_alex'",
+      )
+      expect(deletedCharacterCount.rows[0]?.count).toBe('0')
     } finally {
       await setup?.end()
       await store?.close()

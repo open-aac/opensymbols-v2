@@ -110,6 +110,8 @@ For local development, copy `.env.example` to `.env` and set:
 - `CLERK_JWT_KEY` to Clerk's PEM-formatted JWT public key. This is server-only.
 - `CLERK_AUTHORIZED_PARTIES` to the comma-separated browser origins allowed to
   send tokens, including the exact local origin you use.
+- `CLERK_WEBHOOK_SIGNING_SECRET` to the server-only Standard Webhooks signing
+  secret when testing Clerk account-deletion events.
 
 In the Clerk dashboard, disable password and social sign-in methods for this
 development application and leave email verification code as the only sign-in
@@ -128,10 +130,24 @@ short-lived Clerk bearer tokens at `/api/app/session`; it never accepts a Clerk
 secret key. Clerk's browser SDK manages its own session and this application
 does not copy Clerk tokens into local storage, session storage, URLs, or logs.
 
+Saved characters are private PostgreSQL records scoped to the verified Clerk
+user ID. The local `app_users` table stores only that external ID and lifecycle
+timestamps; it does not copy Clerk profile data. Character configuration is
+stored as versioned JSON, while the rendered SVG remains a browser-generated
+preview.
+
+After deploying an HTTPS beta environment, register
+`https://<beta-host>/api/webhooks/clerk` in the Clerk dashboard and subscribe
+only to `user.deleted`. Install the displayed signing secret as
+`CLERK_WEBHOOK_SIGNING_SECRET` through the host's secret manager. The verified
+event tombstones the local identity and transactionally deletes its saved
+characters. Do not put the signing secret in frontend variables, logs, issues,
+or tracked files.
+
 The obsolete Rails administrator sign-in, session bridge, and public admin
 routes have been removed. Clerk-backed administrator authorization and tools
-are tracked separately. No database user table, webhook, roles, saved
-characters, symbol packs, or personalization is included yet.
+are tracked separately. Roles, symbol packs, and other personalization are not
+included yet.
 
 ## Search benchmark data
 

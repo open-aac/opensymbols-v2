@@ -30,6 +30,7 @@ function routeMetadata(pathname: string, search: string) {
   const accountPages: Record<string, string> = {
     '/account': 'Your dashboard',
     '/account/characters': 'My Characters',
+    '/account/characters/new': 'New character',
     '/account/symbols': 'My Symbols',
     '/account/packs': 'Symbol Packs',
     '/account/settings': 'Account settings',
@@ -37,6 +38,10 @@ function routeMetadata(pathname: string, search: string) {
   const accountTitle = accountPages[pathname]
   if (accountTitle) {
     return { title: formatPageTitle(accountTitle), announcement: `${accountTitle} page loaded` }
+  }
+
+  if (/^\/account\/characters\/[^/]+\/edit$/.test(pathname)) {
+    return { title: formatPageTitle('Edit character'), announcement: 'Edit character page loaded' }
   }
 
   if (pathname.startsWith('/repositories/')) {

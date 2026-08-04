@@ -137,6 +137,41 @@ describe('site layout', () => {
     expect(document.documentElement.style.getPropertyValue('--site-header-height')).toBe('')
   })
 
+  it('uses the dedicated immersive shell for the signed-in character editor', async () => {
+    vi.stubGlobal('ResizeObserver', HeaderResizeObserver)
+    const view = render(
+      <MemoryRouter initialEntries={['/account/characters/new']}>
+        <AppAuthProvider value={signedIn}>
+          <SiteLayout><h1>New character</h1></SiteLayout>
+        </AppAuthProvider>
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('main').parentElement).toHaveClass('site-shell--immersive')
+    expect(screen.getByRole('link', { name: 'Skip to content' })).toHaveAttribute('href', '#main')
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument()
+    expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Primary navigation' })).not.toBeInTheDocument()
+    expect(document.documentElement.style.getPropertyValue('--site-header-height')).toBe('')
+    expect(document.title).toBe('New character | Open Symbols')
+    await expectNoAccessibilityViolations(view.container)
+  })
+
+  it('keeps the dedicated shell when editing a saved character', () => {
+    vi.stubGlobal('ResizeObserver', HeaderResizeObserver)
+    render(
+      <MemoryRouter initialEntries={['/account/characters/10000000-0000-4000-8000-000000000001/edit']}>
+        <AppAuthProvider value={signedIn}>
+          <SiteLayout><h1>Edit character</h1></SiteLayout>
+        </AppAuthProvider>
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('main').parentElement).toHaveClass('site-shell--immersive')
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument()
+    expect(document.title).toBe('Edit character | Open Symbols')
+  })
+
   it('presents OpenAAC as a linked endorsement outside primary navigation', () => {
     render(<MemoryRouter><SiteLayout><p>Content</p></SiteLayout></MemoryRouter>)
 
@@ -256,6 +291,8 @@ describe('site layout', () => {
     ['/sign-up/continue', 'Create an account | Open Symbols'],
     ['/account', 'Your dashboard | Open Symbols'],
     ['/account/characters', 'My Characters | Open Symbols'],
+    ['/account/characters/new', 'New character | Open Symbols'],
+    ['/account/characters/10000000-0000-4000-8000-000000000001/edit', 'Edit character | Open Symbols'],
     ['/account/symbols', 'My Symbols | Open Symbols'],
     ['/account/packs', 'Symbol Packs | Open Symbols'],
     ['/account/settings', 'Account settings | Open Symbols'],
@@ -269,7 +306,7 @@ describe('site layout', () => {
     const scrollTo = vi.fn()
     vi.stubGlobal('scrollTo', scrollTo)
     render(
-      <MemoryRouter initialEntries={['/account/settings']}>
+      <MemoryRouter initialEntries={['/account/characters/new']}>
         <AppAuthProvider value={signedOut}>
           <SiteLayout>
             <Routes>
@@ -286,6 +323,8 @@ describe('site layout', () => {
     expect(screen.getByRole('main')).toHaveFocus()
     expect(screen.getByRole('status')).toHaveTextContent('Sign in page loaded')
     expect(scrollTo).toHaveBeenCalledWith(0, 0)
+    expect(screen.getByRole('banner')).toBeInTheDocument()
+    expect(screen.getByRole('contentinfo')).toBeInTheDocument()
   })
 
   it('keeps the OpenAAC endorsement usable when its remote badge fails', () => {

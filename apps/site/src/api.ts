@@ -22,8 +22,32 @@ export interface AppSessionResponse {
   user_id: string
 }
 
+export type CharacterSkinColour = 'original' | 'light' | 'medium-light' | 'medium' | 'medium-dark' | 'dark'
+export type CharacterHairColour = 'original' | 'black' | 'dark-brown' | 'brown' | 'light-brown' | 'blond' | 'auburn' | 'grey' | 'white'
+export type CharacterShirtColour = 'original' | 'black' | 'white' | 'grey' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple'
+
+export interface SavedCharacter {
+  id: string
+  name: string
+  template_key: 'base-character-prototype'
+  template_version: 1
+  configuration_version: 1
+  settings: { skin_colour: CharacterSkinColour; hair_colour: CharacterHairColour; shirt_colour: CharacterShirtColour }
+  revision: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CharacterWrite {
+  name: string
+  template_key: 'base-character-prototype'
+  template_version: 1
+  configuration_version: 1
+  settings: { skin_colour: CharacterSkinColour; hair_colour: CharacterHairColour; shirt_colour: CharacterShirtColour }
+}
+
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(message: string, readonly status: number, readonly code?: string) {
     super(message)
   }
 }
@@ -182,4 +206,81 @@ export async function getAppSession(getToken: () => Promise<string | null>) {
     throw new ApiError(`Request failed with status ${response.status}`, response.status)
   }
   return response.json() as Promise<AppSessionResponse>
+}
+
+async function characterRequest<T>(
+  getToken: () => Promise<string | null>,
+  url: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const token = await getToken()
+  if (!token) throw new ApiError('Authentication required', 401, 'authentication_required')
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...init.headers,
+    },
+  })
+  if (!response.ok) {
+    let code: string | undefined
+    try {
+      const body = await response.json() as { error?: unknown }
+      if (typeof body.error === 'string') code = body.error
+    } catch {
+      // The status remains the authoritative failure signal.
+    }
+    throw new ApiError(`Request failed with status ${response.status}`, response.status, code)
+  }
+  if (response.status === 204) return undefined as T
+  return response.json() as Promise<T>
+}
+
+export async function getCharacters(getToken: () => Promise<string | null>) {
+  return (await characterRequest<{ characters: SavedCharacter[] }>(
+    getToken,
+    '/api/app/characters',
+  )).characters
+}
+
+export async function getCharacter(getToken: () => Promise<string | null>, id: string) {
+  return (await characterRequest<{ character: SavedCharacter }>(
+    getToken,
+    `/api/app/characters/${encodeURIComponent(id)}`,
+  )).character
+}
+
+export async function createCharacter(
+  getToken: () => Promise<string | null>,
+  character: CharacterWrite,
+) {
+  return (await characterRequest<{ character: SavedCharacter }>(getToken, '/api/app/characters', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(character),
+  })).character
+}
+
+export async function updateCharacter(
+  getToken: () => Promise<string | null>,
+  id: string,
+  character: CharacterWrite,
+  revision: number,
+) {
+  return (await characterRequest<{ character: SavedCharacter }>(
+    getToken,
+    `/api/app/characters/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...character, revision }),
+    },
+  )).character
+}
+
+export function deleteCharacter(getToken: () => Promise<string | null>, id: string) {
+  return characterRequest<void>(getToken, `/api/app/characters/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
 }

@@ -7,6 +7,15 @@ import type {
   SymbolRecord,
   SymbolSettings,
 } from './public-read-types.js'
+import type {
+  CharacterDeleteResult,
+  CharacterListResult,
+  CharacterRecord,
+  CharacterResult,
+  CharacterStore,
+  CharacterUpdateResult,
+  CharacterWrite,
+} from './character-store.js'
 
 interface RepositoryDatabaseRow extends QueryResultRow {
   repo_key: string
@@ -32,6 +41,27 @@ interface ExternalSourceDatabaseRow extends QueryResultRow {
   id: number
   token: string
   settings: string | null
+}
+
+interface AppUserDatabaseRow extends QueryResultRow {
+  deleted_at: Date | string | null
+}
+
+interface CharacterDatabaseRow extends QueryResultRow {
+  id: string
+  clerk_user_id: string
+  name: string
+  template_key: string
+  template_version: number
+  configuration_version: number
+  settings: {
+    skinColour: CharacterRecord['settings']['skinColour']
+    hairColour?: CharacterRecord['settings']['hairColour']
+    shirtColour?: CharacterRecord['settings']['shirtColour']
+  }
+  revision: number
+  created_at: Date | string
+  updated_at: Date | string
 }
 
 export interface ExternalSourceRecord {
@@ -92,7 +122,7 @@ function settingsObject(value: string | null, encryptionKey: string | undefined)
   return decoded as { [key: string]: JsonValue }
 }
 
-export class PostgresPublicReadStore implements PublicApiStore {
+export class PostgresPublicReadStore implements PublicApiStore, CharacterStore {
   constructor(
     private readonly database: DatabaseClient,
     private readonly encryptionKey?: string,
@@ -224,6 +254,131 @@ export class PostgresPublicReadStore implements PublicApiStore {
     return row ? this.externalSourceRecord(row) : null
   }
 
+  async listCharacters(clerkUserId: string, now: string): Promise<CharacterListResult> {
+    return this.database.transaction(async (session) => {
+      if (!await this.ensureActiveAppUser(session, clerkUserId, now)) return { kind: 'account_deleted' }
+      const result = await session.query<CharacterDatabaseRow>(
+        `SELECT id, clerk_user_id, name, template_key, template_version,
+                configuration_version, settings, revision, created_at, updated_at
+         FROM characters
+         WHERE clerk_user_id = $1
+         ORDER BY updated_at DESC, id DESC`,
+        [clerkUserId],
+      )
+      return { kind: 'ok', characters: result.rows.map((row) => this.characterRecord(row)) }
+    })
+  }
+
+  async findCharacter(clerkUserId: string, id: string, now: string): Promise<CharacterResult> {
+    return this.database.transaction(async (session) => {
+      if (!await this.ensureActiveAppUser(session, clerkUserId, now)) return { kind: 'account_deleted' }
+      const result = await session.query<CharacterDatabaseRow>(
+        `SELECT id, clerk_user_id, name, template_key, template_version,
+                configuration_version, settings, revision, created_at, updated_at
+         FROM characters
+         WHERE id = $1 AND clerk_user_id = $2
+         LIMIT 1`,
+        [id, clerkUserId],
+      )
+      const row = result.rows[0]
+      return row ? { kind: 'ok', character: this.characterRecord(row) } : { kind: 'not_found' }
+    })
+  }
+
+  async createCharacter(
+    clerkUserId: string,
+    id: string,
+    character: CharacterWrite,
+    now: string,
+  ): Promise<CharacterResult> {
+    return this.database.transaction(async (session) => {
+      if (!await this.ensureActiveAppUser(session, clerkUserId, now)) return { kind: 'account_deleted' }
+      const result = await session.query<CharacterDatabaseRow>(
+        `INSERT INTO characters
+           (id, clerk_user_id, name, template_key, template_version,
+            configuration_version, settings, revision, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $8)
+         RETURNING id, clerk_user_id, name, template_key, template_version,
+                   configuration_version, settings, revision, created_at, updated_at`,
+        [
+          id,
+          clerkUserId,
+          character.name,
+          character.templateKey,
+          character.templateVersion,
+          character.configurationVersion,
+          character.settings,
+          now,
+        ],
+      )
+      return { kind: 'ok', character: this.characterRecord(result.rows[0]!) }
+    })
+  }
+
+  async updateCharacter(
+    clerkUserId: string,
+    id: string,
+    character: CharacterWrite,
+    revision: number,
+    now: string,
+  ): Promise<CharacterUpdateResult> {
+    return this.database.transaction(async (session) => {
+      if (!await this.ensureActiveAppUser(session, clerkUserId, now)) return { kind: 'account_deleted' }
+      const result = await session.query<CharacterDatabaseRow>(
+        `UPDATE characters
+         SET name = $3, template_key = $4, template_version = $5,
+             configuration_version = $6, settings = $7,
+             revision = revision + 1, updated_at = $8
+         WHERE id = $1 AND clerk_user_id = $2 AND revision = $9
+         RETURNING id, clerk_user_id, name, template_key, template_version,
+                   configuration_version, settings, revision, created_at, updated_at`,
+        [
+          id,
+          clerkUserId,
+          character.name,
+          character.templateKey,
+          character.templateVersion,
+          character.configurationVersion,
+          character.settings,
+          now,
+          revision,
+        ],
+      )
+      const row = result.rows[0]
+      if (row) return { kind: 'ok', character: this.characterRecord(row) }
+      const existing = await session.query<QueryResultRow>(
+        'SELECT 1 FROM characters WHERE id = $1 AND clerk_user_id = $2 LIMIT 1',
+        [id, clerkUserId],
+      )
+      return existing.rows.length ? { kind: 'conflict' } : { kind: 'not_found' }
+    })
+  }
+
+  async deleteCharacter(clerkUserId: string, id: string, now: string): Promise<CharacterDeleteResult> {
+    return this.database.transaction(async (session) => {
+      if (!await this.ensureActiveAppUser(session, clerkUserId, now)) return { kind: 'account_deleted' }
+      const result = await session.query<QueryResultRow>(
+        'DELETE FROM characters WHERE id = $1 AND clerk_user_id = $2 RETURNING id',
+        [id, clerkUserId],
+      )
+      return result.rows.length ? { kind: 'deleted' } : { kind: 'not_found' }
+    })
+  }
+
+  async deleteClerkUser(clerkUserId: string, now: string) {
+    await this.database.transaction(async (session) => {
+      await session.query(
+        `INSERT INTO app_users (clerk_user_id, created_at, deleted_at)
+         VALUES ($1, $2, $2)
+         ON CONFLICT (clerk_user_id)
+         DO UPDATE SET deleted_at = COALESCE(app_users.deleted_at, EXCLUDED.deleted_at)`,
+        [clerkUserId, now],
+      )
+      await session.query('SELECT clerk_user_id FROM app_users WHERE clerk_user_id = $1 FOR UPDATE', [clerkUserId])
+      await session.query('DELETE FROM characters WHERE clerk_user_id = $1', [clerkUserId])
+    })
+  }
+
   close() {
     return this.closeDatabase()
   }
@@ -252,6 +407,40 @@ export class PostgresPublicReadStore implements PublicApiStore {
       id: row.id,
       token: row.token,
       settings: settingsObject(row.settings, this.encryptionKey) as ExternalSourceRecord['settings'],
+    }
+  }
+
+  private async ensureActiveAppUser(session: DatabaseSession, clerkUserId: string, now: string) {
+    await session.query(
+      `INSERT INTO app_users (clerk_user_id, created_at, deleted_at)
+       VALUES ($1, $2, NULL)
+       ON CONFLICT (clerk_user_id) DO NOTHING`,
+      [clerkUserId, now],
+    )
+    const result = await session.query<AppUserDatabaseRow>(
+      'SELECT deleted_at FROM app_users WHERE clerk_user_id = $1 FOR UPDATE',
+      [clerkUserId],
+    )
+    return result.rows[0]?.deleted_at === null
+  }
+
+  private characterRecord(row: CharacterDatabaseRow): CharacterRecord {
+    const date = (value: Date | string) => value instanceof Date ? value.toISOString() : new Date(value).toISOString()
+    return {
+      id: row.id,
+      clerkUserId: row.clerk_user_id,
+      name: row.name,
+      templateKey: row.template_key,
+      templateVersion: row.template_version,
+      configurationVersion: row.configuration_version,
+      settings: {
+        skinColour: row.settings.skinColour,
+        hairColour: row.settings.hairColour ?? 'original',
+        shirtColour: row.settings.shirtColour ?? 'original',
+      },
+      revision: row.revision,
+      createdAt: date(row.created_at),
+      updatedAt: date(row.updated_at),
     }
   }
 }
