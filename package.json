@@ -15,6 +15,14 @@
     "search:prepare": "pnpm --filter @opensymbols/search-import search-import prepare",
     "search:import": "pnpm --filter @opensymbols/search-import search-import import",
     "search:verify": "pnpm --filter @opensymbols/search-import search-import verify",
+    "search:export:postgres": "pnpm --filter @opensymbols/search-import search-rebuild postgres-export",
+    "search:index:preflight": "pnpm --filter @opensymbols/search-import search-rebuild index-preflight",
+    "search:index:build": "pnpm --filter @opensymbols/search-import search-rebuild index-build",
+    "search:index:verify": "pnpm --filter @opensymbols/search-import search-rebuild index-verify",
+    "search:index:activate": "pnpm --filter @opensymbols/search-import search-rebuild index-activate",
+    "search:index:rollback": "pnpm --filter @opensymbols/search-import search-rebuild index-rollback",
+    "search:index:cleanup": "pnpm --filter @opensymbols/search-import search-rebuild index-cleanup",
+    "search:rebuild": "pnpm --filter @opensymbols/search-import search-rebuild rebuild",
     "legacy:up": "docker compose up -d --build --wait postgres legacy-server",
     "legacy:seed": "pnpm legacy:up && docker compose exec legacy-server bundle exec rails db:seed",
     "legacy:down": "docker compose down",
@@ -24,7 +32,7 @@
     "lint": "eslint apps/site apps/server apps/search-import",
     "test": "pnpm test:apps && pnpm test:database && pnpm test:legacy",
     "test:apps": "pnpm --filter @opensymbols/site --filter @opensymbols/server --filter @opensymbols/search-import test",
-    "test:database": "docker compose up -d --wait postgres && pnpm --filter @opensymbols/server test:database",
+    "test:database": "docker compose up -d --wait postgres && pnpm --filter @opensymbols/server test:database && pnpm --filter @opensymbols/search-import test:database",
     "test:legacy": "docker compose build legacy-server && docker compose run --rm -e RAILS_ENV=test -e DATABASE_URL=postgresql://opensymbols:opensymbols@postgres:5432/opensymbols_test legacy-server bundle exec rails db:create db:schema:load test"
   },
   "devDependencies": {

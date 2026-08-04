@@ -4,11 +4,14 @@ export interface CheckpointIdentity {
   host: string
   symbolIndex: string
   symbolIndexCreatedAt: string
+  repositoryIndex?: string
+  repositoryIndexCreatedAt?: string
 }
 
 export interface UploadCheckpoint extends CheckpointIdentity {
   version: 1
   completed: number
+  lastAcknowledgedDocumentId?: string
 }
 
 export function completedForCheckpoint(value: unknown, identity: CheckpointIdentity) {
@@ -20,13 +23,24 @@ export function completedForCheckpoint(value: unknown, identity: CheckpointIdent
     checkpoint.host === identity.host &&
     checkpoint.symbolIndex === identity.symbolIndex &&
     checkpoint.symbolIndexCreatedAt === identity.symbolIndexCreatedAt &&
+    checkpoint.repositoryIndex === identity.repositoryIndex &&
+    checkpoint.repositoryIndexCreatedAt === identity.repositoryIndexCreatedAt &&
     Number.isSafeInteger(checkpoint.completed) && checkpoint.completed! >= 0
     ? checkpoint.completed!
     : 0
 }
 
-export function uploadCheckpoint(completed: number, identity: CheckpointIdentity): UploadCheckpoint {
-  return { version: 1, completed, ...identity }
+export function uploadCheckpoint(
+  completed: number,
+  identity: CheckpointIdentity,
+  lastAcknowledgedDocumentId?: string,
+): UploadCheckpoint {
+  return {
+    version: 1,
+    completed,
+    ...identity,
+    ...(lastAcknowledgedDocumentId ? { lastAcknowledgedDocumentId } : {}),
+  }
 }
 
 export async function uploadWithCheckpoint<T>(options: {

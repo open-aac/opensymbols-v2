@@ -197,6 +197,59 @@ checkpoints and generated datasets stay under `.benchmark-data` and are not
 committed. Keyword search is intentionally the only Meilisearch mode in this
 iteration; semantic and hybrid search are tracked separately.
 
+### Rebuild Meilisearch from PostgreSQL
+
+Production-shaped indexes are built from any PostgreSQL source that exposes the
+existing schema, including the restored local copy and a future Crunchy Bridge
+database. Put the connection, GoSecure, S3/CDN, Meilisearch host, scoped index
+key, and approved document limit in the ignored `.env.search-indexer` file.
+Never pass secrets on the command line.
+
+The reusable index key is separate from the runtime search key. Scope it to
+`symbols`, `symbols_candidate_*`, `repositories`, and
+`repositories_candidate_*`, with only these actions:
+
+```text
+indexes.create indexes.get indexes.delete indexes.swap
+documents.add documents.get
+settings.get settings.update
+tasks.get stats.get search
+```
+
+The key has no key-management, dump, snapshot, or unrelated-index access. Use
+`expiresAt: null` for rebuild availability, record only its UID, and rotate it
+by installing a replacement before revoking the old key.
+
+Export and build a verified candidate without changing live indexes:
+
+```sh
+pnpm search:export:postgres --snapshot-id b002
+pnpm search:index:preflight --input .search-data/postgres-b002
+pnpm search:index:build --input .search-data/postgres-b002
+pnpm search:index:verify --input .search-data/postgres-b002
+```
+
+`pnpm search:rebuild --snapshot-id b002` performs those four steps and stops
+before activation. The preflight refuses to upload when the stable and complete
+candidate indexes would exceed `MEILISEARCH_DOCUMENT_LIMIT`.
+
+On the first activation in a clean project, the command creates and configures
+empty stable indexes before swapping. Later activations leave the live index
+settings untouched. Activation swaps both index pairs atomically, and the
+former stable data remains in the candidate names until smoke testing is
+complete:
+
+```sh
+pnpm search:index:activate --input .search-data/postgres-b002
+pnpm search:index:rollback --input .search-data/postgres-b002
+pnpm search:index:cleanup --input .search-data/postgres-b002 --confirm-build <full-build-hash>
+```
+
+Generated exports and checkpoints stay under `.search-data` and are ignored.
+The exporter uses a repeatable-read, read-only PostgreSQL transaction, streams
+symbols by primary key, excludes non-public content before indexing, and never
+writes to the source database.
+
 ## Verify
 
 ```sh
@@ -210,8 +263,8 @@ pnpm build
 against a disposable PostgreSQL database, and the Rails test suite. Useful
 service commands are
 `pnpm legacy:up`, `pnpm legacy:seed`, `pnpm legacy:logs`, `pnpm test:legacy`, and
-`pnpm legacy:down`; `pnpm test:database` runs only the disposable Hono database
-integration test.
+`pnpm legacy:down`; `pnpm test:database` runs the disposable Hono and
+search-export database integration tests.
 
 ## Workspace
 
