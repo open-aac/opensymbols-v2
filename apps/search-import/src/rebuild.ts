@@ -290,19 +290,22 @@ export async function verifyCandidates(config: RebuildConfig, build: RebuildBuil
 export async function activateBuild(config: RebuildConfig, build: RebuildBuild) {
   await verifyCandidates(config, build)
   const importer = client(config)
+  const stableSymbols = config.stableSymbolIndex ?? 'symbols'
+  const stableRepositories = config.stableRepositoryIndex ?? 'repositories'
+  const bootstrap = await importer.bootstrapStableIndexes(stableSymbols, stableRepositories)
   await importer.swapIndexes([
-    [config.stableSymbolIndex ?? 'symbols', build.symbolCandidate],
-    [config.stableRepositoryIndex ?? 'repositories', build.repositoryCandidate],
+    [stableSymbols, build.symbolCandidate],
+    [stableRepositories, build.repositoryCandidate],
   ])
   const [symbols, repositories] = await Promise.all([
-    importer.stats(config.stableSymbolIndex ?? 'symbols'),
-    importer.stats(config.stableRepositoryIndex ?? 'repositories'),
+    importer.stats(stableSymbols),
+    importer.stats(stableRepositories),
   ])
   if (symbols.numberOfDocuments !== build.manifest.counts.documents ||
       repositories.numberOfDocuments !== build.manifest.counts.repositories) {
     throw new Error('Stable index counts do not match the activated build.')
   }
-  return { activated: build.manifest.buildHash }
+  return { activated: build.manifest.buildHash, bootstrap }
 }
 
 export async function rollbackBuild(config: RebuildConfig, build: RebuildBuild) {

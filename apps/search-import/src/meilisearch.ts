@@ -61,13 +61,17 @@ export class MeilisearchImportClient {
     }
   }
 
-  async configure() {
-    await this.configureIndexes(this.symbolIndex, this.repositoryIndex)
+  private async indexExists(uid: string) {
+    try {
+      await this.indexInfo(uid)
+      return true
+    } catch (error) {
+      if (error instanceof MeilisearchImportError && error.status === 404) return false
+      throw error
+    }
   }
 
-  async configureIndexes(symbolIndex: string, repositoryIndex: string) {
-    await this.ensureIndex(symbolIndex)
-    await this.ensureIndex(repositoryIndex)
+  private async configureSymbolIndex(symbolIndex: string) {
     await this.task(`/indexes/${symbolIndex}/settings`, {
       filterableAttributes: [
         'repoKey', 'locale', 'safe', 'visible', 'symbolKey', 'symbolId', 'hasSkin',
@@ -89,6 +93,9 @@ export class MeilisearchImportClient {
       sortableAttributes: ['symbolId'],
       pagination: { maxTotalHits: 120_000 },
     }, 'PATCH')
+  }
+
+  private async configureRepositoryIndex(repositoryIndex: string) {
     await this.task(`/indexes/${repositoryIndex}/settings`, {
       filterableAttributes: ['repoKey', 'active', 'protected'],
       searchableAttributes: ['name', 'description', 'repoKey'],
@@ -99,6 +106,36 @@ export class MeilisearchImportClient {
       sortableAttributes: ['name'],
       pagination: { maxTotalHits: 10_000 },
     }, 'PATCH')
+  }
+
+  async configure() {
+    await this.configureIndexes(this.symbolIndex, this.repositoryIndex)
+  }
+
+  async configureIndexes(symbolIndex: string, repositoryIndex: string) {
+    await this.ensureIndex(symbolIndex)
+    await this.ensureIndex(repositoryIndex)
+    await this.configureSymbolIndex(symbolIndex)
+    await this.configureRepositoryIndex(repositoryIndex)
+  }
+
+  async bootstrapStableIndexes(symbolIndex: string, repositoryIndex: string) {
+    const [symbolExists, repositoryExists] = await Promise.all([
+      this.indexExists(symbolIndex),
+      this.indexExists(repositoryIndex),
+    ])
+    if (!symbolExists) {
+      await this.ensureIndex(symbolIndex)
+      await this.configureSymbolIndex(symbolIndex)
+    }
+    if (!repositoryExists) {
+      await this.ensureIndex(repositoryIndex)
+      await this.configureRepositoryIndex(repositoryIndex)
+    }
+    return {
+      symbolIndexCreated: !symbolExists,
+      repositoryIndexCreated: !repositoryExists,
+    }
   }
 
   async uploadSymbols(documents: SearchDocument[]) {

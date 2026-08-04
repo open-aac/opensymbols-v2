@@ -66,4 +66,54 @@ describe('Meilisearch import client', () => {
       { indexes: ['repositories', 'repositories_candidate_abc'] },
     ])
   })
+
+  it('bootstraps configured stable indexes in an empty project', async () => {
+    let nextTask = 1
+    const request = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input)
+      if (init?.method === 'POST' && url.endsWith('/indexes')) {
+        return new Response(JSON.stringify({ taskUid: nextTask++ }), { status: 202 })
+      }
+      if (init?.method === 'PATCH' && url.endsWith('/settings')) {
+        return new Response(JSON.stringify({ taskUid: nextTask++ }), { status: 202 })
+      }
+      if (url.includes('/tasks/')) {
+        return new Response(JSON.stringify({ status: 'succeeded' }))
+      }
+      if (url.endsWith('/indexes/symbols') || url.endsWith('/indexes/repositories')) {
+        return new Response('missing', { status: 404 })
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    const importer = new MeilisearchImportClient({
+      host: 'https://example.test', adminApiKey: 'index-key',
+    }, request)
+
+    await expect(importer.bootstrapStableIndexes('symbols', 'repositories')).resolves.toEqual({
+      symbolIndexCreated: true,
+      repositoryIndexCreated: true,
+    })
+    const calls = request.mock.calls.map(([input, init]) => [String(input), init?.method ?? 'GET'])
+    expect(calls.filter(([url, method]) => String(url).endsWith('/indexes') && method === 'POST')).toHaveLength(2)
+    expect(calls.filter(([url, method]) => String(url).endsWith('/settings') && method === 'PATCH')).toHaveLength(2)
+  })
+
+  it('does not reconfigure stable indexes that already exist', async () => {
+    const request = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input)
+      if (url.endsWith('/indexes/symbols') || url.endsWith('/indexes/repositories')) {
+        return new Response(JSON.stringify({ uid: url.split('/').at(-1), createdAt: '2026-08-04T00:00:00Z' }))
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    const importer = new MeilisearchImportClient({
+      host: 'https://example.test', adminApiKey: 'index-key',
+    }, request)
+
+    await expect(importer.bootstrapStableIndexes('symbols', 'repositories')).resolves.toEqual({
+      symbolIndexCreated: false,
+      repositoryIndexCreated: false,
+    })
+    expect(request).toHaveBeenCalledTimes(2)
+  })
 })

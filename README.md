@@ -220,11 +220,6 @@ The key has no key-management, dump, snapshot, or unrelated-index access. Use
 `expiresAt: null` for rebuild availability, record only its UID, and rotate it
 by installing a replacement before revoking the old key.
 
-The current Meilisearch Cloud rebuild key UID is
-`6212e99a-5cb5-4fc5-acbf-1f47cb108fed`. This identifier is not a credential;
-the corresponding key value lives only in approved ignored or hosted secret
-storage.
-
 Export and build a verified candidate without changing live indexes:
 
 ```sh
@@ -238,8 +233,11 @@ pnpm search:index:verify --input .search-data/postgres-b002
 before activation. The preflight refuses to upload when the stable and complete
 candidate indexes would exceed `MEILISEARCH_DOCUMENT_LIMIT`.
 
-Activation swaps both index pairs atomically. The former stable data remains in
-the candidate names until smoke testing is complete:
+On the first activation in a clean project, the command creates and configures
+empty stable indexes before swapping. Later activations leave the live index
+settings untouched. Activation swaps both index pairs atomically, and the
+former stable data remains in the candidate names until smoke testing is
+complete:
 
 ```sh
 pnpm search:index:activate --input .search-data/postgres-b002
