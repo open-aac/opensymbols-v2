@@ -207,6 +207,30 @@ describe('Clerk-owned character API', () => {
     expect((await deleted.request('/api/app/characters', { headers: { Authorization: 'Bearer valid' } })).status).toBe(403)
   })
 
+  it('returns a controlled 503 from every character route when verification is unavailable', async () => {
+    const { store } = setup()
+    const unavailable = createApp({
+      characterStore: store,
+      appSessionVerifier: { verify: async () => { throw new Error('verification unavailable') } },
+    })
+    const requests: Array<[string, RequestInit]> = [
+      ['/api/app/characters', { method: 'GET' }],
+      ['/api/app/characters', { method: 'POST' }],
+      [`/api/app/characters/${id}`, { method: 'GET' }],
+      [`/api/app/characters/${id}`, { method: 'PATCH' }],
+      [`/api/app/characters/${id}`, { method: 'DELETE' }],
+    ]
+
+    for (const [path, init] of requests) {
+      const response = await unavailable.request(path, {
+        ...init,
+        headers: { Authorization: 'Bearer session-token' },
+      })
+      expect(response.status).toBe(503)
+      await expect(response.json()).resolves.toEqual({ error: 'authentication_unavailable' })
+    }
+  })
+
   it('reads, updates, and deletes only through the scoped store', async () => {
     const { characterApp, store } = setup()
     expect((await characterApp.request(`/api/app/characters/${id}`, { headers: { Authorization: 'Bearer valid' } })).status).toBe(200)

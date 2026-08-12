@@ -72,7 +72,18 @@ export function createApp(options: AppOptions = {}) {
   const privateResponse = (context: { header(name: string, value: string): void }) => {
     context.header('Cache-Control', 'private, no-store')
   }
-  const appSession = async (request: Request) => options.appSessionVerifier?.verify(request)
+  const appSession = async (request: Request): Promise<
+    | { kind: 'authenticated'; session: AppSession }
+    | { kind: 'required' }
+    | { kind: 'unavailable' }
+  > => {
+    try {
+      const session = await options.appSessionVerifier?.verify(request)
+      return session ? { kind: 'authenticated', session } : { kind: 'required' }
+    } catch {
+      return { kind: 'unavailable' }
+    }
+  }
 
   app.get('/api/health', async (context) => {
     try {
@@ -88,24 +99,25 @@ export function createApp(options: AppOptions = {}) {
       return context.json({ error: 'authentication_unconfigured' as const }, 503)
     }
 
-    let session
-    try {
-      session = await options.appSessionVerifier.verify(context.req.raw)
-    } catch {
+    const authentication = await appSession(context.req.raw)
+    if (authentication.kind === 'unavailable') {
       return context.json({ error: 'authentication_unavailable' as const }, 503)
     }
-    if (!session) {
+    if (authentication.kind === 'required') {
       return context.json({ error: 'authentication_required' as const }, 401)
     }
 
+    const { session } = authentication
     return context.json({ user_id: session.userId, administrator: session.administrator })
   })
 
   app.get('/api/app/characters', async (context) => {
     privateResponse(context)
     if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
-    const session = await appSession(context.req.raw)
-    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    const authentication = await appSession(context.req.raw)
+    if (authentication.kind === 'unavailable') return context.json({ error: 'authentication_unavailable' as const }, 503)
+    if (authentication.kind === 'required') return context.json({ error: 'authentication_required' as const }, 401)
+    const { session } = authentication
     if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
     try {
       const result = await options.characterStore.listCharacters(session.userId, appNow().toISOString())
@@ -119,8 +131,10 @@ export function createApp(options: AppOptions = {}) {
   app.post('/api/app/characters', async (context) => {
     privateResponse(context)
     if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
-    const session = await appSession(context.req.raw)
-    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    const authentication = await appSession(context.req.raw)
+    if (authentication.kind === 'unavailable') return context.json({ error: 'authentication_unavailable' as const }, 503)
+    if (authentication.kind === 'required') return context.json({ error: 'authentication_required' as const }, 401)
+    const { session } = authentication
     if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
     let input: unknown
     try { input = await context.req.json() } catch { return context.json({ error: 'invalid_character' as const }, 422) }
@@ -145,8 +159,10 @@ export function createApp(options: AppOptions = {}) {
   app.get('/api/app/characters/:id', async (context) => {
     privateResponse(context)
     if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
-    const session = await appSession(context.req.raw)
-    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    const authentication = await appSession(context.req.raw)
+    if (authentication.kind === 'unavailable') return context.json({ error: 'authentication_unavailable' as const }, 503)
+    if (authentication.kind === 'required') return context.json({ error: 'authentication_required' as const }, 401)
+    const { session } = authentication
     if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
     const id = context.req.param('id')
     if (!isCharacterId(id)) return context.json({ error: 'not_found' as const }, 404)
@@ -163,8 +179,10 @@ export function createApp(options: AppOptions = {}) {
   app.patch('/api/app/characters/:id', async (context) => {
     privateResponse(context)
     if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
-    const session = await appSession(context.req.raw)
-    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    const authentication = await appSession(context.req.raw)
+    if (authentication.kind === 'unavailable') return context.json({ error: 'authentication_unavailable' as const }, 503)
+    if (authentication.kind === 'required') return context.json({ error: 'authentication_required' as const }, 401)
+    const { session } = authentication
     if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
     const id = context.req.param('id')
     if (!isCharacterId(id)) return context.json({ error: 'not_found' as const }, 404)
@@ -193,8 +211,10 @@ export function createApp(options: AppOptions = {}) {
   app.delete('/api/app/characters/:id', async (context) => {
     privateResponse(context)
     if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
-    const session = await appSession(context.req.raw)
-    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    const authentication = await appSession(context.req.raw)
+    if (authentication.kind === 'unavailable') return context.json({ error: 'authentication_unavailable' as const }, 503)
+    if (authentication.kind === 'required') return context.json({ error: 'authentication_required' as const }, 401)
+    const { session } = authentication
     if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
     const id = context.req.param('id')
     if (!isCharacterId(id)) return context.json({ error: 'not_found' as const }, 404)
@@ -214,13 +234,12 @@ export function createApp(options: AppOptions = {}) {
       return context.json({ error: 'authentication_unconfigured' as const }, 503)
     }
 
-    let session
-    try {
-      session = await options.appSessionVerifier.verify(context.req.raw)
-    } catch {
+    const authentication = await appSession(context.req.raw)
+    if (authentication.kind === 'unavailable') {
       return context.json({ error: 'authentication_unavailable' as const }, 503)
     }
-    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    if (authentication.kind === 'required') return context.json({ error: 'authentication_required' as const }, 401)
+    const { session } = authentication
     if (session.administrator !== true) {
       return context.json({ error: 'administrator_required' as const }, 403)
     }
