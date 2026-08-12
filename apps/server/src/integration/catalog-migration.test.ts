@@ -74,7 +74,13 @@ databaseIntegration('CatalogMigrator integration', () => {
             name: 'Cup', enabled: true, has_skin: true, has_variants: true,
             use_scores: { vessel: 3 },
             image_url: 'https://cdn.example/cup.svg', file_extension: 'svg',
-            locales: { en: { name: 'Cup\0', search_string: 'cup drink', boosts: { cup: 4 }, uses: { cup: [1] } } },
+            locales: {
+              en: {
+                name: 'Cup\0', search_string: 'cup drink', boosts: { cup: 4 },
+                use_scores: { Cup: 1, ' cup ': 4 }, uses: { cup: [1] },
+              },
+              es: { name: 'Taza', search_string: 'taza bebida' },
+            },
             variant_paths: { dark: 'cup-dark.svg' }, skin_spots: [1],
           })}`,
           timestamp,
@@ -151,6 +157,35 @@ databaseIntegration('CatalogMigrator integration', () => {
         result: 'normalized',
       })
       expect(JSON.stringify(reconciliation.rows)).not.toContain('Cup')
+
+      await database.query(`
+        DELETE FROM catalog_symbol_search_signals WHERE scope = 'base';
+        ALTER TABLE catalog_symbol_search_signals
+          DROP CONSTRAINT catalog_symbol_search_signals_pkey;
+        ALTER TABLE catalog_symbol_search_signals DROP COLUMN scope;
+        ALTER TABLE catalog_symbol_search_signals DROP COLUMN ordinal;
+        ALTER TABLE catalog_symbol_search_signals
+          ADD PRIMARY KEY (symbol_id, locale, term, signal_type);
+        ALTER TABLE catalog_symbol_localizations DROP COLUMN ordinal;
+      `)
+      expect((await migrator.migrate('fixture-001')).verified).toBe(true)
+      const rebuiltLocales = await database.query(
+        `SELECT locale, ordinal FROM catalog_symbol_localizations
+         WHERE symbol_id = 101 ORDER BY ordinal`,
+      )
+      expect(rebuiltLocales.rows).toEqual([
+        { locale: 'en', ordinal: 0 },
+        { locale: 'es', ordinal: 1 },
+      ])
+      const rebuiltSignals = await database.query(
+        `SELECT term, ordinal FROM catalog_symbol_search_signals
+         WHERE symbol_id = 101 AND locale = 'en' AND scope = 'localization'
+           AND signal_type = 'use_score' ORDER BY ordinal`,
+      )
+      expect(rebuiltSignals.rows).toEqual([
+        { term: 'Cup', ordinal: 0 },
+        { term: ' cup ', ordinal: 1 },
+      ])
 
       expect(await legacyFingerprint(database)).toBe(legacyBefore)
       expect(await migrator.rollback('fixture-001')).toEqual({

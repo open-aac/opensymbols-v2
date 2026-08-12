@@ -144,8 +144,34 @@ export class CatalogMigrator {
 
   async migrate(snapshotId: string) {
     validateSnapshotId(snapshotId)
-    await this.pool.query(catalogSchemaSql)
-    const existing = await this.findRun(snapshotId)
+    const requiresOrderingRebuild = await this.requiresOrderingMetadataRebuild()
+    let existing: { id: string, status: string } | undefined
+    if (requiresOrderingRebuild) {
+      const upgrade = await this.pool.connect()
+      try {
+        await upgrade.query('BEGIN')
+        await upgrade.query(catalogSchemaSql)
+        const run = await upgrade.query<{ id: string, status: string }>(
+          'SELECT id, status FROM catalog_migration_runs WHERE snapshot_id = $1',
+          [snapshotId],
+        )
+        if (run.rows[0]?.status !== 'completed') {
+          throw new Error(
+            'A populated normalized catalog without ordering metadata must belong to the completed snapshot being migrated.',
+          )
+        }
+        await upgrade.query('DELETE FROM catalog_migration_runs WHERE id = $1', [run.rows[0].id])
+        await upgrade.query('COMMIT')
+      } catch (error) {
+        await upgrade.query('ROLLBACK')
+        throw error
+      } finally {
+        upgrade.release()
+      }
+    } else {
+      await this.pool.query(catalogSchemaSql)
+      existing = await this.findRun(snapshotId)
+    }
     if (existing?.status === 'completed') return this.verify(snapshotId)
     if (existing) throw new Error(`Migration snapshot ${snapshotId} is already ${existing.status}`)
 
@@ -275,6 +301,37 @@ export class CatalogMigrator {
       [snapshotId],
     )
     return { snapshotId, rolledBack: result.rowCount === 1 }
+  }
+
+  private async requiresOrderingMetadataRebuild() {
+    const tables = await this.pool.query<{ localizations: string | null, signals: string | null }>(
+      `SELECT to_regclass('catalog_symbol_localizations')::text AS localizations,
+              to_regclass('catalog_symbol_search_signals')::text AS signals`,
+    )
+    if (!tables.rows[0]?.localizations && !tables.rows[0]?.signals) return false
+    const columns = await this.pool.query<{ table_name: string, column_name: string }>(
+      `SELECT table_name, column_name
+       FROM information_schema.columns
+       WHERE table_schema = current_schema()
+         AND ((table_name = 'catalog_symbol_localizations' AND column_name = 'ordinal')
+           OR (table_name = 'catalog_symbol_search_signals' AND column_name IN ('scope', 'ordinal')))`,
+    )
+    const present = new Set(columns.rows.map(({ table_name, column_name }) => `${table_name}.${column_name}`))
+    const metadataComplete = present.has('catalog_symbol_localizations.ordinal')
+      && present.has('catalog_symbol_search_signals.scope')
+      && present.has('catalog_symbol_search_signals.ordinal')
+    if (metadataComplete) return false
+    const populatedChecks = []
+    if (tables.rows[0]?.localizations) {
+      populatedChecks.push('EXISTS (SELECT 1 FROM catalog_symbol_localizations)')
+    }
+    if (tables.rows[0]?.signals) {
+      populatedChecks.push('EXISTS (SELECT 1 FROM catalog_symbol_search_signals)')
+    }
+    const populated = await this.pool.query<{ populated: boolean }>(
+      `SELECT ${populatedChecks.join(' OR ')} AS populated`,
+    )
+    return populated.rows[0]?.populated === true
   }
 
   private async auditWithClient(client: PoolClient): Promise<CatalogAuditReport> {
@@ -609,8 +666,8 @@ export class CatalogMigrator {
   }
 
   private async findRun(snapshotId: string) {
-    const result = await this.pool.query<{ status: string }>(
-      `SELECT status FROM catalog_migration_runs WHERE snapshot_id = $1`,
+    const result = await this.pool.query<{ id: string, status: string }>(
+      `SELECT id, status FROM catalog_migration_runs WHERE snapshot_id = $1`,
       [snapshotId],
     )
     return result.rows[0]
