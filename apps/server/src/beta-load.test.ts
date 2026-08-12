@@ -43,8 +43,10 @@ describe('beta load verification', () => {
     expect(evaluateBetaLoad(failedRoute).missingRoutes).toEqual(['random'])
   })
 
-  it('attempts every acceptance route even when the configured duration is short', async () => {
+  it('starts the measured duration after a slow bootstrap and excludes bootstrap metrics', async () => {
+    let clock = 0
     const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      clock += 10
       const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url)
       if (url.pathname === '/api/health') return Response.json({ status: 'ok' })
       if (url.pathname.endsWith('/repositories/arasaac/symbols')) {
@@ -56,18 +58,46 @@ describe('beta load verification', () => {
       return Response.json([{ unsafe_result: false, repo_key: 'arasaac' }])
     })
 
-    const { samples, result } = await runBetaLoad({
+    const { bootstrapSamples, samples, result } = await runBetaLoad({
       baseUrl: 'https://beta.opensymbols.org',
-      durationMs: 1,
+      durationMs: 30,
       concurrency: 1,
+      fetchImpl: fetchImpl as typeof fetch,
+      now: () => clock,
+    })
+
+    expect(bootstrapSamples).toHaveLength(betaLoadRoutes.length)
+    expect(samples).toHaveLength(3)
+    expect(result.requests).toBe(3)
+    expect(result.missingRoutes.length).toBeGreaterThan(0)
+    expect(result.passed).toBe(false)
+  })
+
+  it('stops after bootstrap failure and reports it separately', async () => {
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url)
+      if (url.pathname === '/api/health') return new Response(null, { status: 503 })
+      if (url.pathname.endsWith('/repositories/arasaac/symbols')) {
+        return Response.json({ symbols: [{ unsafe_result: false, repo_key: 'arasaac' }] })
+      }
+      if (url.pathname.endsWith('/random')) {
+        return Response.json(Array.from({ length: 9 }, () => ({ unsafe_result: false })))
+      }
+      return Response.json([{ unsafe_result: false, repo_key: 'arasaac' }])
+    })
+
+    const { bootstrapSamples, samples, result } = await runBetaLoad({
+      baseUrl: 'https://beta.opensymbols.org',
+      durationMs: 600_000,
+      concurrency: 20,
       fetchImpl: fetchImpl as typeof fetch,
     })
 
-    expect(new Set(samples.map((sample) => sample.route))).toEqual(
-      new Set(betaLoadRoutes.map((route) => route.name)),
-    )
-    expect(result.missingRoutes).toEqual([])
-    expect(result.passed).toBe(true)
+    expect(bootstrapSamples).toHaveLength(betaLoadRoutes.length)
+    expect(samples).toEqual([])
+    expect(result.requests).toBe(0)
+    expect(result.bootstrapFailures).toEqual([{ route: 'health', error: 'HTTP 503' }])
+    expect(result.passed).toBe(false)
   })
 
   it('rejects safe-search and repository filter leaks', () => {
