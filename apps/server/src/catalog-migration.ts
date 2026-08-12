@@ -102,6 +102,7 @@ export interface CatalogMigratorOptions {
   encryptionKey?: string
   batchSize?: number
   clock?: () => Date
+  afterSourceAudit?: () => Promise<void>
 }
 
 export class CatalogMigrator {
@@ -109,12 +110,14 @@ export class CatalogMigrator {
   private readonly encryptionKey: string | undefined
   private readonly batchSize: number
   private readonly clock: () => Date
+  private readonly afterSourceAudit: () => Promise<void>
 
   constructor(options: CatalogMigratorOptions) {
     this.pool = new Pool({ connectionString: options.connectionString, max: 2 })
     this.encryptionKey = options.encryptionKey
     this.batchSize = options.batchSize ?? 500
     this.clock = options.clock ?? (() => new Date())
+    this.afterSourceAudit = options.afterSourceAudit ?? (async () => undefined)
     if (!Number.isInteger(this.batchSize) || this.batchSize < 1 || this.batchSize > 1_000) {
       throw new Error('batchSize must be an integer between 1 and 1000')
     }
@@ -127,7 +130,7 @@ export class CatalogMigrator {
   async audit(): Promise<CatalogAuditReport> {
     const client = await this.pool.connect()
     try {
-      await client.query('BEGIN TRANSACTION READ ONLY')
+      await client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
       const report = await this.auditWithClient(client)
       await client.query('COMMIT')
       return report
@@ -141,12 +144,6 @@ export class CatalogMigrator {
 
   async migrate(snapshotId: string) {
     validateSnapshotId(snapshotId)
-    const audit = await this.audit()
-    if (audit.unknownKeys.length > 0) {
-      const summary = audit.unknownKeys.map(({ table, path }) => `${table}.${path}`).join(', ')
-      throw new CatalogMigrationDataError(`Unmapped legacy keys prevent migration: ${summary}`)
-    }
-
     await this.pool.query(catalogSchemaSql)
     const existing = await this.findRun(snapshotId)
     if (existing?.status === 'completed') return this.verify(snapshotId)
@@ -155,7 +152,13 @@ export class CatalogMigrator {
     const client = await this.pool.connect()
     const runId = randomUUID()
     try {
-      await client.query('BEGIN')
+      await client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ')
+      const audit = await this.auditWithClient(client)
+      if (audit.unknownKeys.length > 0) {
+        const summary = audit.unknownKeys.map(({ table, path }) => `${table}.${path}`).join(', ')
+        throw new CatalogMigrationDataError(`Unmapped legacy keys prevent migration: ${summary}`)
+      }
+      await this.afterSourceAudit()
       await client.query(
         `INSERT INTO catalog_migration_runs
            (id, snapshot_id, status, source_postgresql_version, source_fingerprint,
@@ -191,7 +194,16 @@ export class CatalogMigrator {
         ],
       )
       await client.query('COMMIT')
-      return this.verify(snapshotId)
+      return {
+        snapshotId,
+        status: 'completed',
+        sourceCounts: audit.sourceCounts,
+        normalizedCounts,
+        reconciliationCount: Number(reconciliationResult.rows[0]?.count ?? 0),
+        verified: sourceTables.every(
+          (table) => audit.sourceCounts[table] === normalizedCounts[catalogTableForSource(table)],
+        ),
+      }
     } catch (error) {
       await client.query('ROLLBACK')
       throw error
@@ -202,10 +214,10 @@ export class CatalogMigrator {
 
   async verify(snapshotId: string): Promise<CatalogVerificationReport> {
     validateSnapshotId(snapshotId)
-    const currentAudit = await this.audit()
     const client = await this.pool.connect()
     try {
-      await client.query('BEGIN TRANSACTION READ ONLY')
+      await client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+      const currentAudit = await this.auditWithClient(client)
       const run = await client.query<{
         id: string
         status: string

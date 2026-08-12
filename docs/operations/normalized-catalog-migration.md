@@ -7,8 +7,9 @@ migration environment. Do not point it at production Heroku.
 ## Safety model
 
 - `audit` runs in a read-only transaction and writes nothing.
-- `migrate` refuses unknown top-level or nested settings keys before creating
-  rows. A single transaction owns every normalized row in a named snapshot.
+- `migrate` audits and copies from one repeatable-read transaction, so active
+  legacy writers cannot change the source snapshot between those phases. It
+  refuses unknown top-level or nested settings keys before creating rows.
 - A SHA-256 source fingerprint covers every legacy row and typed column. The
   fingerprint is reported, but source settings and secrets are not.
 - Embedded NUL characters are stripped by one named reconciliation rule. Each

@@ -149,6 +149,48 @@ databaseIntegration('CatalogMigrator integration', () => {
       })
       expect((await database.query('SELECT count(*)::int AS count FROM catalog_symbols')).rows[0].count).toBe(0)
       expect(await legacyFingerprint(database)).toBe(legacyBefore)
+
+      await migrator.close()
+      let releaseMigration: (() => void) | undefined
+      let signalAuditComplete: (() => void) | undefined
+      const auditComplete = new Promise<void>((resolve) => { signalAuditComplete = resolve })
+      const continueMigration = new Promise<void>((resolve) => { releaseMigration = resolve })
+      migrator = new CatalogMigrator({
+        connectionString,
+        batchSize: 1,
+        afterSourceAudit: async () => {
+          signalAuditComplete?.()
+          await continueMigration
+        },
+      })
+
+      const concurrentMigration = migrator.migrate('fixture-concurrent')
+      await auditComplete
+      await database.query(
+        `UPDATE picture_symbols
+         SET settings = replace(settings, '"name":"Cup"', '"name":"Changed"')
+         WHERE id = 101`,
+      )
+      releaseMigration?.()
+
+      const concurrentResult = await concurrentMigration
+      expect(concurrentResult.verified).toBe(true)
+      const copiedDuringWrite = await database.query(
+        'SELECT name FROM catalog_symbols WHERE id = 101',
+      )
+      expect(copiedDuringWrite.rows[0]?.name).toBe('Cup')
+      expect((await migrator.verify('fixture-concurrent')).verified).toBe(false)
+
+      await database.query(
+        `UPDATE picture_symbols
+         SET settings = replace(settings, '"name":"Changed"', '"name":"Cup"')
+         WHERE id = 101`,
+      )
+      expect((await migrator.verify('fixture-concurrent')).verified).toBe(true)
+      expect(await migrator.rollback('fixture-concurrent')).toEqual({
+        snapshotId: 'fixture-concurrent', rolledBack: true,
+      })
+      expect(await legacyFingerprint(database)).toBe(legacyBefore)
     } finally {
       await migrator?.close()
       await database?.end()
