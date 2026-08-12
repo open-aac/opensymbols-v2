@@ -1,4 +1,5 @@
 import { verifyToken } from '@clerk/backend'
+import { TokenVerificationError, TokenVerificationErrorReason } from '@clerk/backend/errors'
 
 export interface AppSession {
   userId: string
@@ -19,6 +20,20 @@ function bearerToken(request: Request) {
   const authorization = request.headers.get('authorization')
   const match = authorization?.match(/^Bearer\s+([^\s]+)$/i)
   return match?.[1]
+}
+
+const unavailableVerificationReasons = new Set<string>([
+  TokenVerificationErrorReason.InvalidSecretKey,
+  TokenVerificationErrorReason.LocalJWKMissing,
+  TokenVerificationErrorReason.RemoteJWKFailedToLoad,
+  TokenVerificationErrorReason.RemoteJWKInvalid,
+  TokenVerificationErrorReason.RemoteJWKMissing,
+  TokenVerificationErrorReason.JWKFailedToResolve,
+])
+
+function isInvalidSession(error: unknown) {
+  return error instanceof TokenVerificationError
+    && !unavailableVerificationReasons.has(error.reason)
 }
 
 export function parseAuthorizedParties(value: string | undefined) {
@@ -51,8 +66,9 @@ export function createClerkSessionVerifier(
         return typeof payload.sub === 'string' && payload.sub
           ? { userId: payload.sub, administrator: payload.administrator === true }
           : null
-      } catch {
-        return null
+      } catch (error) {
+        if (isInvalidSession(error)) return null
+        throw error
       }
     },
   }

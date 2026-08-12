@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { TokenVerificationError, TokenVerificationErrorReason } from '@clerk/backend/errors'
 import { createClerkSessionVerifier, parseAuthorizedParties } from './clerk-auth.js'
 
 describe('Clerk session verification', () => {
@@ -47,7 +48,10 @@ describe('Clerk session verification', () => {
 
   it('rejects missing, malformed, invalid, and subjectless tokens', async () => {
     const verify = vi.fn()
-      .mockRejectedValueOnce(new Error('expired'))
+      .mockRejectedValueOnce(new TokenVerificationError({
+        message: 'expired',
+        reason: TokenVerificationErrorReason.TokenExpired,
+      }))
       .mockResolvedValueOnce({})
     const verifier = createClerkSessionVerifier({
       jwtKey: 'public-key',
@@ -65,6 +69,22 @@ describe('Clerk session verification', () => {
     await expect(verifier.verify(new Request('http://localhost/api/app/session', {
       headers: { Authorization: 'Bearer subjectless-token' },
     }))).resolves.toBeNull()
+  })
+
+  it('propagates operational verification failures to the application boundary', async () => {
+    const unavailable = new TokenVerificationError({
+      message: 'local verification key is unavailable',
+      reason: TokenVerificationErrorReason.LocalJWKMissing,
+    })
+    const verifier = createClerkSessionVerifier({
+      jwtKey: 'public-key',
+      authorizedParties: ['http://localhost:5173'],
+      verify: vi.fn().mockRejectedValue(unavailable),
+    })
+
+    await expect(verifier.verify(new Request('http://localhost/api/app/session', {
+      headers: { Authorization: 'Bearer session-token' },
+    }))).rejects.toBe(unavailable)
   })
 
   it('fails fast when configured incompletely', () => {
