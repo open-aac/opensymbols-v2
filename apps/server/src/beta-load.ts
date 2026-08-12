@@ -9,6 +9,7 @@ export interface BetaLoadResult {
   requests: number
   errors: number
   errorRate: number
+  missingRoutes: string[]
   p50Ms: number
   p95Ms: number
   p99Ms: number
@@ -103,15 +104,20 @@ export function evaluateBetaLoad(samples: BetaLoadSample[]): BetaLoadResult {
   const searchLatencies = samples.filter((sample) => sample.search).map((sample) => sample.latencyMs)
   const errorRate = requests ? errors / requests : 1
   const searchP95Ms = percentile(searchLatencies, 0.95)
+  const successfulRoutes = new Set(samples.filter((sample) => !sample.error).map((sample) => sample.route))
+  const missingRoutes = betaLoadRoutes
+    .map((route) => route.name)
+    .filter((route) => !successfulRoutes.has(route))
   return {
     requests,
     errors,
     errorRate,
+    missingRoutes,
     p50Ms: percentile(latencies, 0.5),
     p95Ms: percentile(latencies, 0.95),
     p99Ms: percentile(latencies, 0.99),
     searchP95Ms,
-    passed: requests > 0 && errorRate < 0.01 && searchP95Ms < 500,
+    passed: requests > 0 && missingRoutes.length === 0 && errorRate < 0.01 && searchP95Ms < 500,
   }
 }
 
@@ -125,20 +131,28 @@ export async function runBetaLoad(options: BetaLoadOptions) {
   const samples: BetaLoadSample[] = []
   const deadline = Date.now() + options.durationMs
 
+  const sampleRoute = async (route: RouteCheck) => {
+    const started = performance.now()
+    let error: string | undefined
+    try {
+      const response = await fetchImpl(new URL(route.path, baseUrl), { signal: AbortSignal.timeout(timeoutMs) })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      route.validate(await response.json())
+    } catch (caught) {
+      error = caught instanceof Error ? caught.message : 'unknown request failure'
+    }
+    samples.push({ route: route.name, latencyMs: performance.now() - started, search: route.search, error })
+  }
+
+  // Guarantee that even a deliberately short run exercises every acceptance
+  // route. The evaluator still requires a successful sample for each route.
+  await Promise.all(betaLoadRoutes.map(sampleRoute))
+
   await Promise.all(Array.from({ length: options.concurrency }, async (_, worker) => {
     let requestNumber = worker
     while (Date.now() < deadline) {
       const route = betaLoadRoutes[requestNumber % betaLoadRoutes.length]!
-      const started = performance.now()
-      let error: string | undefined
-      try {
-        const response = await fetchImpl(new URL(route.path, baseUrl), { signal: AbortSignal.timeout(timeoutMs) })
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        route.validate(await response.json())
-      } catch (caught) {
-        error = caught instanceof Error ? caught.message : 'unknown request failure'
-      }
-      samples.push({ route: route.name, latencyMs: performance.now() - started, search: route.search, error })
+      await sampleRoute(route)
       requestNumber += options.concurrency
     }
   }))
