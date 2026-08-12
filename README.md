@@ -250,6 +250,22 @@ The exporter uses a repeatable-read, read-only PostgreSQL transaction, streams
 symbols by primary key, excludes non-public content before indexing, and never
 writes to the source database.
 
+### Normalize the legacy catalog
+
+The TypeScript catalog migrator audits GoSecure settings, creates parallel
+typed `catalog_*` tables, verifies a stable source fingerprint and exact counts,
+and can remove only the rows owned by its snapshot. It does not switch runtime
+reads or writes. See the
+[normalized catalog migration runbook](docs/operations/normalized-catalog-migration.md)
+for mapping and reconciliation details.
+
+```sh
+pnpm catalog:migrate:audit --snapshot-id b002
+pnpm catalog:migrate:run --snapshot-id b002
+pnpm catalog:migrate:verify --snapshot-id b002
+pnpm catalog:migrate:rollback --snapshot-id b002
+```
+
 ### Public beta operations
 
 The secret-free [beta launch runbook](docs/operations/beta-launch.md) records
