@@ -39,7 +39,7 @@ ordinal to populated data.
 ## Commands
 
 Set `DATABASE_URL` and, only when the source contains encrypted GoSecure rows,
-`SECURE_ENCRYPTION_KEY` in process environment. Do not pass either value as a
+`LEGACY_GOSECURE_DECRYPTION_KEY` in process environment. Do not pass either value as a
 command-line option.
 
 ```sh

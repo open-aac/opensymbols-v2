@@ -10,8 +10,8 @@ export function securePublicApiNonce() {
   return randomBytes(18).toString('hex').slice(0, 24)
 }
 
-function sha512(value: string, salt: string, encryptionKey: string) {
-  return createHash('sha512').update(`${value}${salt}${encryptionKey}`).digest('hex')
+function sha512(value: string, salt: string, signingKey: string) {
+  return createHash('sha512').update(`${value}${salt}${signingKey}`).digest('hex')
 }
 
 function throttleLevel(source: ExternalSourceRecord) {
@@ -63,7 +63,7 @@ export async function exchangeSharedSecret(
   sharedSecret: string,
   now: Date,
   nonce: PublicApiNonce,
-  encryptionKey: string,
+  signingKey: string,
 ) {
   const source = await store.findExternalSourceByToken(sharedSecret)
   if (!source) return null
@@ -71,7 +71,7 @@ export async function exchangeSharedSecret(
   const userId = createHash('md5').update(String(timestamp)).digest('hex').slice(0, 10)
   const prefix = `token::${source.id}-${throttleLevel(source)}:${userId}:${timestamp}:${nonce('access_token')}:`
   return {
-    access_token: `${prefix}${sha512(prefix, 'access_token_sha', encryptionKey)}`,
+    access_token: `${prefix}${sha512(prefix, 'access_token_sha', signingKey)}`,
     expires: iso8601Seconds(new Date(now.getTime() + DISPLAYED_EXPIRY_SECONDS * 1000)),
   }
 }
@@ -91,7 +91,8 @@ export async function verifyAccessToken(
   store: PublicApiStore,
   rawToken: string,
   now: Date,
-  encryptionKey: string,
+  signingKey: string,
+  legacyVerificationKey?: string,
 ): Promise<AccessTokenVerification> {
   const token = rawToken.includes('::') ? rawToken : `token::${rawToken}`
   const match = token.match(/^token::(\d+)-(\d+):([^:]+):(\d+):([^:]+):([0-9a-f]{128})$/)
@@ -103,7 +104,11 @@ export async function verifyAccessToken(
   const source = await store.findExternalSourceById(sourceId)
   if (!source || throttleLevel(source) < level) return { kind: 'invalid' }
   const prefix = `token::${sourceId}-${level}:${userId}:${timestamp}:${nonce}:`
-  if (!signaturesMatch(signature!, sha512(prefix, 'access_token_sha', encryptionKey))) {
+  const primaryMatches = signaturesMatch(signature!, sha512(prefix, 'access_token_sha', signingKey))
+  const legacyMatches = legacyVerificationKey
+    ? signaturesMatch(signature!, sha512(prefix, 'access_token_sha', legacyVerificationKey))
+    : false
+  if (!primaryMatches && !legacyMatches) {
     return { kind: 'invalid' }
   }
   const nowSeconds = Math.floor(now.getTime() / 1000)

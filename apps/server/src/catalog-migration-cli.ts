@@ -20,7 +20,7 @@ if (!snapshotId) throw new Error('--snapshot-id is required')
 
 const migrator = new CatalogMigrator({
   connectionString: databaseUrlFromEnvironment(),
-  encryptionKey: process.env.SECURE_ENCRYPTION_KEY,
+  encryptionKey: process.env.LEGACY_GOSECURE_DECRYPTION_KEY,
   batchSize: values['batch-size'] === undefined ? undefined : Number(values['batch-size']),
 })
 

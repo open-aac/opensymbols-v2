@@ -1,4 +1,5 @@
 export type Locale = string
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
 export interface RepositoryRecord {
   repoKey: string
   name: string
