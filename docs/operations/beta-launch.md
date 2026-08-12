@@ -112,7 +112,8 @@ restart policy. Install these variables through Railway's secret manager:
 
 ```text
 DATABASE_URL
-SECURE_ENCRYPTION_KEY
+PUBLIC_API_TOKEN_SIGNING_KEY
+PUBLIC_API_LEGACY_TOKEN_VERIFICATION_KEY (temporary, maximum 36-hour overlap only)
 S3_BUCKET
 S3_CDN
 DISCOVERY_PROVIDER=meilisearch

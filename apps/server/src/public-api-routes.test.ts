@@ -4,7 +4,7 @@ import type { ExternalSourceRecord, PublicApiStore } from './public-read-store.j
 import type { RepositoryRecord, SymbolRecord } from './public-read-types.js'
 
 const fixedNow = new Date('2026-07-22T10:00:00.000Z')
-const encryptionKey = 'test-secure-encryption-key'
+const signingKey = 'dedicated-public-api-signing-key'
 const repositories: RepositoryRecord[] = [
   { repoKey: 'demo', settings: { name: 'Demo', active: true } },
   { repoKey: 'private', settings: { name: 'Private', active: true, protected: true } },
@@ -52,10 +52,14 @@ function routeStore(): PublicApiStore {
   }
 }
 
-function apiApp(store = routeStore(), now = fixedNow) {
+function apiApp(store = routeStore(), now = fixedNow, options: {
+  signingKey?: string
+  legacyVerificationKey?: string
+} = {}) {
   return createApp({
     publicApiStore: store,
-    publicApiEncryptionKey: encryptionKey,
+    publicApiTokenSigningKey: options.signingKey ?? signingKey,
+    publicApiLegacyTokenVerificationKey: options.legacyVerificationKey,
     publicApiNow: () => now,
     publicApiNonce: (label) => label === 'external_source_token'
       ? 'generated-shared-secret'
@@ -64,7 +68,10 @@ function apiApp(store = routeStore(), now = fixedNow) {
 }
 
 async function createAccessToken(store: PublicApiStore) {
-  const app = apiApp(store)
+  return createAccessTokenWithApp(apiApp(store))
+}
+
+async function createAccessTokenWithApp(app: ReturnType<typeof createApp>) {
   const application = await app.request('/api/v2/generate_secret', {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -149,6 +156,31 @@ describe('documented v2 public API routes', () => {
     await expect(expired.json()).resolves.toEqual({ error: 'token expired', token_expired: true })
   })
 
+  it('supports a verification-only legacy overlap without issuing legacy signatures', async () => {
+    const store = routeStore()
+    const legacySigningKey = 'former-public-api-signing-key'
+    const legacyToken = await createAccessTokenWithApp(apiApp(store, fixedNow, {
+      signingKey: legacySigningKey,
+    }))
+    const overlapApp = apiApp(store, fixedNow, { legacyVerificationKey: legacySigningKey })
+    const accepted = await overlapApp.request('/api/v2/symbols?q=hello', {
+      headers: { Authorization: legacyToken },
+    })
+    expect(accepted.status).toBe(200)
+
+    const newTokenResponse = await overlapApp.request('/api/v2/token', {
+      method: 'POST', body: new URLSearchParams({ secret: 'generated-shared-secret' }),
+    })
+    const newToken = (await newTokenResponse.json() as { access_token: string }).access_token
+    const legacyOnlyApp = apiApp(store, fixedNow, { signingKey: legacySigningKey })
+    expect((await legacyOnlyApp.request('/api/v2/symbols?q=hello', {
+      headers: { Authorization: newToken },
+    })).status).toBe(400)
+    expect((await apiApp(store).request('/api/v2/symbols?q=hello', {
+      headers: { Authorization: legacyToken },
+    })).status).toBe(400)
+  })
+
   it('returns stable database errors without exposing failures', async () => {
     const store = routeStore()
     store.createExternalSource = vi.fn().mockRejectedValue(new Error('private database detail'))
@@ -164,7 +196,7 @@ describe('documented v2 public API routes', () => {
   })
 
   it('reports missing token-signing configuration without falling back to Rails', async () => {
-    const app = createApp({ publicApiStore: routeStore(), publicApiEncryptionKey: '' })
+    const app = createApp({ publicApiStore: routeStore(), publicApiTokenSigningKey: '' })
     const token = await app.request('/api/v2/token', {
       method: 'POST', body: new URLSearchParams({ secret: 'shared-secret' }),
     })

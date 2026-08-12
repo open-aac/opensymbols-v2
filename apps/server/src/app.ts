@@ -42,7 +42,8 @@ export interface AppOptions {
   discoveryCatalog?: DiscoveryCatalog
   symbolRequestStore?: PublicDiscoveryStore
   publicApiStore?: PublicApiStore
-  publicApiEncryptionKey?: string
+  publicApiTokenSigningKey?: string
+  publicApiLegacyTokenVerificationKey?: string
   publicApiNow?: () => Date
   publicApiNonce?: PublicApiNonce
   s3Bucket?: string
@@ -346,7 +347,9 @@ export function createApp(options: AppOptions = {}) {
     const store = options.publicApiStore
     const now = options.publicApiNow ?? (() => new Date())
     const nonce = options.publicApiNonce ?? securePublicApiNonce
-    const encryptionKey = options.publicApiEncryptionKey ?? process.env.SECURE_ENCRYPTION_KEY
+    const signingKey = options.publicApiTokenSigningKey ?? process.env.PUBLIC_API_TOKEN_SIGNING_KEY
+    const legacyVerificationKey = options.publicApiLegacyTokenVerificationKey
+      ?? process.env.PUBLIC_API_LEGACY_TOKEN_VERIFICATION_KEY
     const formBody = async (context: { req: { parseBody(): Promise<Record<string, unknown>> } }) => {
       try {
         return await context.req.parseBody()
@@ -373,10 +376,10 @@ export function createApp(options: AppOptions = {}) {
       const body = await formBody(context)
       const sharedSecret = typeof body?.secret === 'string' ? body.secret.trim() : ''
       if (!sharedSecret) return context.json({ error: 'secret required' }, 400)
-      if (!encryptionKey) return context.json({ error: 'authentication_unconfigured' as const }, 503)
+      if (!signingKey) return context.json({ error: 'authentication_unconfigured' as const }, 503)
       if (sharedSecret.startsWith('temp')) return context.json({ error: 'invalid token' }, 400)
       try {
-        const result = await exchangeSharedSecret(store, sharedSecret, now(), nonce, encryptionKey)
+        const result = await exchangeSharedSecret(store, sharedSecret, now(), nonce, signingKey)
         if (!result) return context.json({ error: 'invalid token' }, 400)
         return context.json(result)
       } catch {
@@ -385,11 +388,13 @@ export function createApp(options: AppOptions = {}) {
     })
 
     app.get('/api/v2/symbols', async (context) => {
-      if (!encryptionKey) return context.json({ error: 'authentication_unconfigured' as const }, 503)
+      if (!signingKey) return context.json({ error: 'authentication_unconfigured' as const }, 503)
       const token = context.req.header('authorization') ?? context.req.query('access_token')
       if (!token) return context.json({ error: 'invalid token' }, 400)
       try {
-        const verification = await verifyAccessToken(store, token, now(), encryptionKey)
+        const verification = await verifyAccessToken(
+          store, token, now(), signingKey, legacyVerificationKey,
+        )
         if (verification.kind === 'expired') {
           return context.json({ error: 'token expired', token_expired: true }, 401)
         }

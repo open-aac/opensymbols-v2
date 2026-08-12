@@ -123,7 +123,7 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
         publicReadStore: store,
         publicDiscoveryStore: store,
         publicApiStore: store,
-        publicApiEncryptionKey: 'test-secure-encryption-key',
+        publicApiTokenSigningKey: 'dedicated-public-api-signing-key',
         publicApiNow: () => new Date('2026-07-22T10:00:00.000Z'),
         publicApiNonce: (label) => label === 'external_source_token'
           ? 'integration-shared-secret'

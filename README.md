@@ -267,6 +267,11 @@ pnpm catalog:migrate:verify --snapshot-id b002
 pnpm catalog:migrate:rollback --snapshot-id b002
 ```
 
+Hono public API tokens use a dedicated signing key and an optional, temporary
+legacy verification key. See the
+[public API token signing runbook](docs/operations/public-api-token-signing.md)
+for the maximum 36-hour overlap, rotation, and emergency recovery procedure.
+
 ### Public beta operations
 
 The secret-free [beta launch runbook](docs/operations/beta-launch.md) records
