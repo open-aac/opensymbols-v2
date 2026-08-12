@@ -103,6 +103,7 @@ export interface CatalogMigratorOptions {
   batchSize?: number
   clock?: () => Date
   afterSourceAudit?: () => Promise<void>
+  afterOrderingSourceRemoval?: () => Promise<void>
 }
 
 export class CatalogMigrator {
@@ -111,6 +112,7 @@ export class CatalogMigrator {
   private readonly batchSize: number
   private readonly clock: () => Date
   private readonly afterSourceAudit: () => Promise<void>
+  private readonly afterOrderingSourceRemoval: () => Promise<void>
 
   constructor(options: CatalogMigratorOptions) {
     this.pool = new Pool({ connectionString: options.connectionString, max: 2 })
@@ -118,6 +120,7 @@ export class CatalogMigrator {
     this.batchSize = options.batchSize ?? 500
     this.clock = options.clock ?? (() => new Date())
     this.afterSourceAudit = options.afterSourceAudit ?? (async () => undefined)
+    this.afterOrderingSourceRemoval = options.afterOrderingSourceRemoval ?? (async () => undefined)
     if (!Number.isInteger(this.batchSize) || this.batchSize < 1 || this.batchSize > 1_000) {
       throw new Error('batchSize must be an integer between 1 and 1000')
     }
@@ -145,46 +148,41 @@ export class CatalogMigrator {
   async migrate(snapshotId: string) {
     validateSnapshotId(snapshotId)
     const requiresOrderingRebuild = await this.requiresOrderingMetadataRebuild()
-    let existing: { id: string, status: string } | undefined
-    if (requiresOrderingRebuild) {
-      const upgrade = await this.pool.connect()
-      try {
-        await upgrade.query('BEGIN')
-        await upgrade.query(catalogSchemaSql)
-        const run = await upgrade.query<{ id: string, status: string }>(
-          'SELECT id, status FROM catalog_migration_runs WHERE snapshot_id = $1',
-          [snapshotId],
-        )
-        if (run.rows[0]?.status !== 'completed') {
-          throw new Error(
-            'A populated normalized catalog without ordering metadata must belong to the completed snapshot being migrated.',
-          )
-        }
-        await upgrade.query('DELETE FROM catalog_migration_runs WHERE id = $1', [run.rows[0].id])
-        await upgrade.query('COMMIT')
-      } catch (error) {
-        await upgrade.query('ROLLBACK')
-        throw error
-      } finally {
-        upgrade.release()
-      }
-    } else {
+    if (!requiresOrderingRebuild) {
       await this.pool.query(catalogSchemaSql)
-      existing = await this.findRun(snapshotId)
+      const existing = await this.findRun(snapshotId)
+      if (existing?.status === 'completed') return this.verify(snapshotId)
+      if (existing) throw new Error(`Migration snapshot ${snapshotId} is already ${existing.status}`)
     }
-    if (existing?.status === 'completed') return this.verify(snapshotId)
-    if (existing) throw new Error(`Migration snapshot ${snapshotId} is already ${existing.status}`)
 
     const client = await this.pool.connect()
     const runId = randomUUID()
     try {
       await client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ')
+      let replacedRunId: string | undefined
+      if (requiresOrderingRebuild) {
+        await client.query(catalogSchemaSql)
+        const existing = await client.query<{ id: string, status: string }>(
+          'SELECT id, status FROM catalog_migration_runs WHERE snapshot_id = $1',
+          [snapshotId],
+        )
+        if (existing.rows[0]?.status !== 'completed') {
+          throw new Error(
+            'A populated normalized catalog without ordering metadata must belong to the completed snapshot being migrated.',
+          )
+        }
+        replacedRunId = existing.rows[0].id
+      }
       const audit = await this.auditWithClient(client)
       if (audit.unknownKeys.length > 0) {
         const summary = audit.unknownKeys.map(({ table, path }) => `${table}.${path}`).join(', ')
         throw new CatalogMigrationDataError(`Unmapped legacy keys prevent migration: ${summary}`)
       }
       await this.afterSourceAudit()
+      if (replacedRunId) {
+        await client.query('DELETE FROM catalog_migration_runs WHERE id = $1', [replacedRunId])
+        await this.afterOrderingSourceRemoval()
+      }
       await client.query(
         `INSERT INTO catalog_migration_runs
            (id, snapshot_id, status, source_postgresql_version, source_fingerprint,

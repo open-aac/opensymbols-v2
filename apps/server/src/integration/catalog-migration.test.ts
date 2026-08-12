@@ -168,6 +168,30 @@ databaseIntegration('CatalogMigrator integration', () => {
           ADD PRIMARY KEY (symbol_id, locale, term, signal_type);
         ALTER TABLE catalog_symbol_localizations DROP COLUMN ordinal;
       `)
+      await migrator.close()
+      let catalogRowsVisibleDuringFailedReplacement = 0
+      migrator = new CatalogMigrator({
+        connectionString,
+        batchSize: 1,
+        afterOrderingSourceRemoval: async () => {
+          const visible = await database!.query('SELECT count(*)::int AS count FROM catalog_symbols')
+          catalogRowsVisibleDuringFailedReplacement = visible.rows[0]?.count ?? 0
+          throw new Error('simulated replacement failure')
+        },
+      })
+      await expect(migrator.migrate('fixture-001')).rejects.toThrow('simulated replacement failure')
+      expect(catalogRowsVisibleDuringFailedReplacement).toBe(2)
+      expect((await database.query(
+        `SELECT count(*)::int AS count FROM information_schema.columns
+         WHERE table_schema = current_schema()
+           AND table_name = 'catalog_symbol_localizations' AND column_name = 'ordinal'`,
+      )).rows[0]?.count).toBe(0)
+      expect((await database.query(
+        'SELECT count(*)::int AS count FROM catalog_symbols',
+      )).rows[0]?.count).toBe(2)
+
+      await migrator.close()
+      migrator = new CatalogMigrator({ connectionString, batchSize: 1 })
       expect((await migrator.migrate('fixture-001')).verified).toBe(true)
       const rebuiltLocales = await database.query(
         `SELECT locale, ordinal FROM catalog_symbol_localizations

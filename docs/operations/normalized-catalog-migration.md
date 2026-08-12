@@ -31,8 +31,10 @@ Schema creation is idempotent. Running `migrate` again for a completed snapshot
 performs verification rather than inserting a second copy.
 If a completed normalized snapshot predates locale and search-signal ordering
 metadata, `migrate` removes only that snapshot's derived catalog rows and
-rebuilds them from the unchanged legacy source. It never assigns a shared
-placeholder ordinal to populated data.
+rebuilds them from the unchanged legacy source in the same transaction. Readers
+never observe the intermediate deletion, and a failed replacement restores the
+previous catalog automatically. The upgrade never assigns a shared placeholder
+ordinal to populated data.
 
 ## Commands
 
