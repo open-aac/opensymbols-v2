@@ -1,11 +1,8 @@
 import { Pool, type QueryResultRow } from 'pg'
-import { decodeGoSecure, encodeGoSecure, GoSecureDecodeError } from './go-secure.js'
 import type {
   JsonValue,
   RepositoryRecord,
-  RepositorySettings,
   SymbolRecord,
-  SymbolSettings,
 } from './public-read-types.js'
 import type {
   CharacterDeleteResult,
@@ -19,28 +16,70 @@ import type {
 
 interface RepositoryDatabaseRow extends QueryResultRow {
   repo_key: string
-  settings: string | null
+  name: string | null
+  description: string | null
+  website_url: string | null
+  active: boolean
+  protected: boolean
+  repository_type: string | null
+  symbol_count: number | null
+  protected_symbol_count: number | null
+  attribution_license: string | null
+  attribution_license_url: string | null
+  attribution_author_name: string | null
+  attribution_author_url: string | null
 }
 
 interface SymbolDatabaseRow extends QueryResultRow {
-  id: number
+  id: number | string
   repo_key: string
   symbol_key: string
-  enabled: boolean | null
-  has_skin: boolean | null
-  unsafe_result: boolean | null
-  settings: string | null
+  name: string | null
+  description: string | null
+  row_enabled: boolean | null
+  settings_enabled: boolean | null
+  row_has_skin: boolean | null
+  settings_has_skin: boolean | null
+  has_variants: boolean
+  row_unsafe: boolean | null
+  settings_unsafe: boolean | null
+  protected: boolean
+  protected_symbol: boolean
+  image_url: string | null
+  file_extension: string | null
+  license: string | null
+  license_url: string | null
+  author: string | null
+  author_url: string | null
+  source_url: string | null
+  search_string: string | null
+  use_scores: Record<string, number>
+  locales: Record<string, {
+    name: string | null
+    description: string | null
+    search_string: string | null
+    use_scores: Record<string, number>
+  }>
 }
 
 interface SymbolRequestDatabaseRow extends QueryResultRow {
-  id: number
-  settings: string | null
+  id: number | string
+  vote_count: number
 }
 
 interface ExternalSourceDatabaseRow extends QueryResultRow {
-  id: number
-  token: string
-  settings: string | null
+  id: number | string
+  shared_secret: string
+  name: string | null
+  email: string | null
+  purpose: string | null
+  organization: string | null
+  organization_url: string | null
+  website_url: string | null
+  twitter: string | null
+  approved: boolean
+  full_access: boolean
+  global_token: boolean
 }
 
 interface AppUserDatabaseRow extends QueryResultRow {
@@ -110,35 +149,71 @@ export interface PublicApiStore extends PublicDiscoveryStore {
 
 export interface PostgresPublicReadStoreOptions {
   connectionString: string
-  encryptionKey?: string
 }
 
-function settingsObject(value: string | null, encryptionKey: string | undefined) {
-  if (value === null) throw new GoSecureDecodeError()
-  const decoded = decodeGoSecure(value, encryptionKey)
-  if (decoded === null || Array.isArray(decoded) || typeof decoded !== 'object') {
-    throw new GoSecureDecodeError()
-  }
-  return decoded as { [key: string]: JsonValue }
+const repositorySelect = `
+  SELECT repo_key, name, description, website_url, active, protected, repository_type,
+         symbol_count, protected_symbol_count, attribution_license,
+         attribution_license_url, attribution_author_name, attribution_author_url
+  FROM catalog_repositories`
+
+const symbolSelect = `
+  SELECT s.id, r.repo_key, s.symbol_key, s.name, s.description, s.row_enabled,
+         s.settings_enabled, s.row_has_skin, s.settings_has_skin, s.has_variants,
+         s.row_unsafe, s.settings_unsafe, s.protected, s.protected_symbol,
+         s.image_url, s.file_extension, s.license, s.license_url, s.author,
+         s.author_url, s.source_url, s.search_string,
+         COALESCE((
+           SELECT json_object_agg(signal.term, signal.score ORDER BY signal.ordinal)
+           FROM catalog_symbol_search_signals signal
+           WHERE signal.symbol_id = s.id AND signal.locale = 'en'
+             AND signal.scope = 'base' AND signal.signal_type = 'use_score'
+         ), '{}'::json) AS use_scores,
+         COALESCE(localized.locales, '{}'::json) AS locales
+  FROM catalog_symbols s
+  JOIN catalog_repositories r ON r.id = s.repository_id
+  LEFT JOIN LATERAL (
+    SELECT json_object_agg(l.locale, json_strip_nulls(json_build_object(
+      'name', l.name,
+      'description', l.description,
+      'search_string', l.search_string,
+      'use_scores', COALESCE((
+        SELECT json_object_agg(signal.term, signal.score ORDER BY signal.ordinal)
+        FROM catalog_symbol_search_signals signal
+        WHERE signal.symbol_id = l.symbol_id AND signal.locale = l.locale
+          AND signal.signal_type = 'use_score'
+          AND signal.scope = 'localization'
+      ), '{}'::json)
+    )) ORDER BY l.ordinal) AS locales
+    FROM catalog_symbol_localizations l
+    WHERE l.symbol_id = s.id
+  ) localized ON true`
+
+const externalSourceSelect = `
+  SELECT id, shared_secret, name, email, purpose, organization, organization_url,
+         website_url, twitter, approved, full_access, global_token
+  FROM catalog_api_clients`
+
+function stringSetting(value: JsonValue | undefined) {
+  return typeof value === 'string' ? value : null
 }
 
 export class PostgresPublicReadStore implements PublicApiStore, CharacterStore {
   constructor(
     private readonly database: DatabaseClient,
-    private readonly encryptionKey?: string,
     private readonly closeDatabase: () => Promise<void> = async () => undefined,
   ) {}
 
   async listRepositories() {
     const result = await this.database.query<RepositoryDatabaseRow>(
-      'SELECT repo_key, settings FROM symbol_repositories ORDER BY id',
+      `${repositorySelect} ORDER BY id`,
     )
     return result.rows.map((row) => this.repositoryRecord(row))
   }
 
   async findRepository(repoKey: string) {
     const result = await this.database.query<RepositoryDatabaseRow>(
-      'SELECT repo_key, settings FROM symbol_repositories WHERE repo_key = $1 LIMIT 1',
+      `${repositorySelect} WHERE repo_key = $1 LIMIT 1`,
       [repoKey],
     )
     const row = result.rows[0]
@@ -147,9 +222,8 @@ export class PostgresPublicReadStore implements PublicApiStore, CharacterStore {
 
   async findSymbol(repoKey: string, symbolKey: string) {
     const result = await this.database.query<SymbolDatabaseRow>(
-      `SELECT id, repo_key, symbol_key, enabled, has_skin, unsafe_result, settings
-       FROM picture_symbols
-       WHERE repo_key = $1 AND symbol_key = $2
+      `${symbolSelect}
+       WHERE r.repo_key = $1 AND s.symbol_key = $2
        LIMIT 1`,
       [repoKey, symbolKey],
     )
@@ -161,19 +235,14 @@ export class PostgresPublicReadStore implements PublicApiStore, CharacterStore {
 
   async listSymbols() {
     const result = await this.database.query<SymbolDatabaseRow>(
-      `SELECT id, repo_key, symbol_key, enabled, has_skin, unsafe_result, settings
-       FROM picture_symbols
-       ORDER BY id`,
+      `${symbolSelect} ORDER BY s.id`,
     )
     return result.rows.map((row) => this.symbolRecord(row))
   }
 
   async listRepositorySymbols(repoKey: string) {
     const result = await this.database.query<SymbolDatabaseRow>(
-      `SELECT id, repo_key, symbol_key, enabled, has_skin, unsafe_result, settings
-       FROM picture_symbols
-       WHERE repo_key = $1
-       ORDER BY id`,
+      `${symbolSelect} WHERE r.repo_key = $1 ORDER BY s.id`,
       [repoKey],
     )
     return result.rows.map((row) => this.symbolRecord(row))
@@ -183,38 +252,43 @@ export class PostgresPublicReadStore implements PublicApiStore, CharacterStore {
     await this.database.transaction(async (session) => {
       await session.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`en:${phrase}`])
       const result = await session.query<SymbolRequestDatabaseRow>(
-        `SELECT id, settings
-         FROM symbol_requests
+        `SELECT id, vote_count
+         FROM catalog_symbol_requests
          WHERE phrase = $1 AND locale = 'en'
-         ORDER BY id
          LIMIT 1
          FOR UPDATE`,
         [phrase],
       )
       const existing = result.rows[0]
-      const decoded = existing
-        ? settingsObject(existing.settings, this.encryptionKey)
-        : {}
-      const comments = Array.isArray(decoded.comments) ? [...decoded.comments] : []
-      comments.push({ user_id: null, text: comment, timestamp: createdAt })
-      const settings = encodeGoSecure(
-        { ...decoded, comments, n_votes: comments.length },
-        this.encryptionKey,
-      )
-
+      let requestId: number | string
       if (existing) {
-        await session.query('UPDATE symbol_requests SET settings = $1, updated_at = $2 WHERE id = $3', [
-          settings,
-          createdAt,
-          existing.id,
-        ])
-      } else {
+        requestId = existing.id
         await session.query(
-          `INSERT INTO symbol_requests (phrase, locale, settings, created_at, updated_at)
-           VALUES ($1, 'en', $2, $3, $3)`,
-          [phrase, settings, createdAt],
+          `UPDATE catalog_symbol_requests
+           SET vote_count = vote_count + 1, updated_at = $1 WHERE id = $2`,
+          [createdAt, requestId],
         )
+      } else {
+        const inserted = await session.query<SymbolRequestDatabaseRow>(
+          `INSERT INTO catalog_symbol_requests
+             (migration_run_id, phrase, locale, vote_count, created_at, updated_at)
+           VALUES (NULL, $1, 'en', 1, $2, $2)
+           RETURNING id, vote_count`,
+          [phrase, createdAt],
+        )
+        requestId = inserted.rows[0]!.id
       }
+      const ordinal = await session.query<{ ordinal: number }>(
+        `SELECT COALESCE(max(ordinal), -1)::int + 1 AS ordinal
+         FROM catalog_symbol_request_comments WHERE request_id = $1`,
+        [requestId],
+      )
+      await session.query(
+        `INSERT INTO catalog_symbol_request_comments
+           (migration_run_id, request_id, ordinal, user_id, comment_text, commented_at)
+         VALUES (NULL, $1, $2, NULL, $3, $4)`,
+        [requestId, ordinal.rows[0]!.ordinal, comment, createdAt],
+      )
     })
   }
 
@@ -223,22 +297,28 @@ export class PostgresPublicReadStore implements PublicApiStore, CharacterStore {
     sourceSettings: ExternalSourceRecord['settings'],
     createdAt: string,
   ) {
-    const settings = encodeGoSecure(
-      { ...sourceSettings } as { [key: string]: JsonValue },
-      this.encryptionKey,
-    )
     const result = await this.database.query<ExternalSourceDatabaseRow>(
-      `INSERT INTO external_sources (token, settings, created_at, updated_at)
-       VALUES ($1, $2, $3, $3)
-       RETURNING id, token, settings`,
-      [token, settings, createdAt],
+      `INSERT INTO catalog_api_clients
+         (migration_run_id, shared_secret, name, email, purpose, organization,
+          organization_url, website_url, twitter, approved, full_access, global_token,
+          created_at, updated_at)
+       VALUES (NULL,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)
+       RETURNING id, shared_secret, name, email, purpose, organization, organization_url,
+                 website_url, twitter, approved, full_access, global_token`,
+      [
+        token, stringSetting(sourceSettings.name), stringSetting(sourceSettings.email),
+        stringSetting(sourceSettings.purpose), stringSetting(sourceSettings.org),
+        stringSetting(sourceSettings.org_url), stringSetting(sourceSettings.url),
+        stringSetting(sourceSettings.twitter), sourceSettings.approved === true,
+        sourceSettings.full_access === true, sourceSettings.global_token === true, createdAt,
+      ],
     )
     return this.externalSourceRecord(result.rows[0]!)
   }
 
   async findExternalSourceByToken(token: string) {
     const result = await this.database.query<ExternalSourceDatabaseRow>(
-      'SELECT id, token, settings FROM external_sources WHERE token = $1 LIMIT 1',
+      `${externalSourceSelect} WHERE shared_secret = $1 LIMIT 1`,
       [token],
     )
     const row = result.rows[0]
@@ -247,7 +327,7 @@ export class PostgresPublicReadStore implements PublicApiStore, CharacterStore {
 
   async findExternalSourceById(id: number) {
     const result = await this.database.query<ExternalSourceDatabaseRow>(
-      'SELECT id, token, settings FROM external_sources WHERE id = $1 LIMIT 1',
+      `${externalSourceSelect} WHERE id = $1 LIMIT 1`,
       [id],
     )
     const row = result.rows[0]
@@ -386,27 +466,72 @@ export class PostgresPublicReadStore implements PublicApiStore, CharacterStore {
   private repositoryRecord(row: RepositoryDatabaseRow): RepositoryRecord {
     return {
       repoKey: row.repo_key,
-      settings: settingsObject(row.settings, this.encryptionKey) as RepositorySettings,
+      settings: {
+        name: row.name,
+        description: row.description,
+        url: row.website_url,
+        active: row.active,
+        protected: row.protected,
+        repository_type: row.repository_type,
+        n_symbols: row.symbol_count ?? undefined,
+        n_protected_symbols: row.protected_symbol_count ?? undefined,
+        default_attribution: {
+          license: row.attribution_license,
+          license_url: row.attribution_license_url,
+          author_name: row.attribution_author_name,
+          author_url: row.attribution_author_url,
+        },
+      },
     }
   }
 
   private symbolRecord(row: SymbolDatabaseRow): SymbolRecord {
     return {
-      id: row.id,
+      id: Number(row.id),
       repoKey: row.repo_key,
       symbolKey: row.symbol_key,
-      enabled: row.enabled,
-      hasSkin: row.has_skin,
-      unsafeResult: row.unsafe_result,
-      settings: settingsObject(row.settings, this.encryptionKey) as SymbolSettings,
+      enabled: row.row_enabled,
+      hasSkin: row.row_has_skin,
+      unsafeResult: row.row_unsafe,
+      settings: {
+        name: row.name,
+        description: row.description,
+        enabled: row.settings_enabled ?? undefined,
+        image_url: row.image_url,
+        file_extension: row.file_extension,
+        license: row.license,
+        license_url: row.license_url,
+        author: row.author,
+        author_url: row.author_url,
+        source_url: row.source_url,
+        protected: row.protected,
+        protected_symbol: row.protected_symbol,
+        unsafe_result: row.settings_unsafe ?? undefined,
+        has_skin: row.settings_has_skin ?? undefined,
+        has_variants: row.has_variants,
+        search_string: row.search_string,
+        use_scores: row.use_scores,
+        locales: row.locales,
+      },
     }
   }
 
   private externalSourceRecord(row: ExternalSourceDatabaseRow): ExternalSourceRecord {
     return {
-      id: row.id,
-      token: row.token,
-      settings: settingsObject(row.settings, this.encryptionKey) as ExternalSourceRecord['settings'],
+      id: Number(row.id),
+      token: row.shared_secret,
+      settings: {
+        name: row.name ?? undefined,
+        email: row.email ?? undefined,
+        purpose: row.purpose ?? undefined,
+        org: row.organization ?? undefined,
+        org_url: row.organization_url ?? undefined,
+        url: row.website_url ?? undefined,
+        twitter: row.twitter ?? undefined,
+        approved: row.approved,
+        full_access: row.full_access,
+        global_token: row.global_token,
+      },
     }
   }
 
@@ -472,5 +597,5 @@ export function createPostgresPublicReadStore(options: PostgresPublicReadStoreOp
       }
     },
   }
-  return new PostgresPublicReadStore(database, options.encryptionKey, () => pool.end())
+  return new PostgresPublicReadStore(database, () => pool.end())
 }

@@ -103,6 +103,7 @@ export interface CatalogMigratorOptions {
   batchSize?: number
   clock?: () => Date
   afterSourceAudit?: () => Promise<void>
+  afterOrderingSourceRemoval?: () => Promise<void>
 }
 
 export class CatalogMigrator {
@@ -111,6 +112,7 @@ export class CatalogMigrator {
   private readonly batchSize: number
   private readonly clock: () => Date
   private readonly afterSourceAudit: () => Promise<void>
+  private readonly afterOrderingSourceRemoval: () => Promise<void>
 
   constructor(options: CatalogMigratorOptions) {
     this.pool = new Pool({ connectionString: options.connectionString, max: 2 })
@@ -118,6 +120,7 @@ export class CatalogMigrator {
     this.batchSize = options.batchSize ?? 500
     this.clock = options.clock ?? (() => new Date())
     this.afterSourceAudit = options.afterSourceAudit ?? (async () => undefined)
+    this.afterOrderingSourceRemoval = options.afterOrderingSourceRemoval ?? (async () => undefined)
     if (!Number.isInteger(this.batchSize) || this.batchSize < 1 || this.batchSize > 1_000) {
       throw new Error('batchSize must be an integer between 1 and 1000')
     }
@@ -144,21 +147,42 @@ export class CatalogMigrator {
 
   async migrate(snapshotId: string) {
     validateSnapshotId(snapshotId)
-    await this.pool.query(catalogSchemaSql)
-    const existing = await this.findRun(snapshotId)
-    if (existing?.status === 'completed') return this.verify(snapshotId)
-    if (existing) throw new Error(`Migration snapshot ${snapshotId} is already ${existing.status}`)
+    const requiresOrderingRebuild = await this.requiresOrderingMetadataRebuild()
+    if (!requiresOrderingRebuild) {
+      await this.pool.query(catalogSchemaSql)
+      const existing = await this.findRun(snapshotId)
+      if (existing?.status === 'completed') return this.verify(snapshotId)
+      if (existing) throw new Error(`Migration snapshot ${snapshotId} is already ${existing.status}`)
+    }
 
     const client = await this.pool.connect()
     const runId = randomUUID()
     try {
       await client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ')
+      let replacedRunId: string | undefined
+      if (requiresOrderingRebuild) {
+        await client.query(catalogSchemaSql)
+        const existing = await client.query<{ id: string, status: string }>(
+          'SELECT id, status FROM catalog_migration_runs WHERE snapshot_id = $1',
+          [snapshotId],
+        )
+        if (existing.rows[0]?.status !== 'completed') {
+          throw new Error(
+            'A populated normalized catalog without ordering metadata must belong to the completed snapshot being migrated.',
+          )
+        }
+        replacedRunId = existing.rows[0].id
+      }
       const audit = await this.auditWithClient(client)
       if (audit.unknownKeys.length > 0) {
         const summary = audit.unknownKeys.map(({ table, path }) => `${table}.${path}`).join(', ')
         throw new CatalogMigrationDataError(`Unmapped legacy keys prevent migration: ${summary}`)
       }
       await this.afterSourceAudit()
+      if (replacedRunId) {
+        await client.query('DELETE FROM catalog_migration_runs WHERE id = $1', [replacedRunId])
+        await this.afterOrderingSourceRemoval()
+      }
       await client.query(
         `INSERT INTO catalog_migration_runs
            (id, snapshot_id, status, source_postgresql_version, source_fingerprint,
@@ -175,6 +199,8 @@ export class CatalogMigrator {
       await this.migrateSymbols(client, runId)
       await this.migrateRequests(client, runId)
       await this.migrateApiClients(client, runId)
+      await synchronizeIdentity(client, 'catalog_symbol_requests')
+      await synchronizeIdentity(client, 'catalog_api_clients')
 
       const normalizedCounts = await normalizedBaseCounts(client)
       const reconciliationResult = await client.query<{ count: string }>(
@@ -273,6 +299,37 @@ export class CatalogMigrator {
       [snapshotId],
     )
     return { snapshotId, rolledBack: result.rowCount === 1 }
+  }
+
+  private async requiresOrderingMetadataRebuild() {
+    const tables = await this.pool.query<{ localizations: string | null, signals: string | null }>(
+      `SELECT to_regclass('catalog_symbol_localizations')::text AS localizations,
+              to_regclass('catalog_symbol_search_signals')::text AS signals`,
+    )
+    if (!tables.rows[0]?.localizations && !tables.rows[0]?.signals) return false
+    const columns = await this.pool.query<{ table_name: string, column_name: string }>(
+      `SELECT table_name, column_name
+       FROM information_schema.columns
+       WHERE table_schema = current_schema()
+         AND ((table_name = 'catalog_symbol_localizations' AND column_name = 'ordinal')
+           OR (table_name = 'catalog_symbol_search_signals' AND column_name IN ('scope', 'ordinal')))`,
+    )
+    const present = new Set(columns.rows.map(({ table_name, column_name }) => `${table_name}.${column_name}`))
+    const metadataComplete = present.has('catalog_symbol_localizations.ordinal')
+      && present.has('catalog_symbol_search_signals.scope')
+      && present.has('catalog_symbol_search_signals.ordinal')
+    if (metadataComplete) return false
+    const populatedChecks = []
+    if (tables.rows[0]?.localizations) {
+      populatedChecks.push('EXISTS (SELECT 1 FROM catalog_symbol_localizations)')
+    }
+    if (tables.rows[0]?.signals) {
+      populatedChecks.push('EXISTS (SELECT 1 FROM catalog_symbol_search_signals)')
+    }
+    const populated = await this.pool.query<{ populated: boolean }>(
+      `SELECT ${populatedChecks.join(' OR ')} AS populated`,
+    )
+    return populated.rows[0]?.populated === true
   }
 
   private async auditWithClient(client: PoolClient): Promise<CatalogAuditReport> {
@@ -448,10 +505,10 @@ export class CatalogMigrator {
       ], symbolRows)
       await insertRowsInChunks(client, 'catalog_symbol_localizations', [
         'migration_run_id', 'symbol_id', 'locale', 'name', 'description', 'search_string',
-        'name_defaulted', 'generated_name', 'generated_description', 'batch_translation',
+        'name_defaulted', 'generated_name', 'generated_description', 'batch_translation', 'ordinal',
       ], localizationRows)
       await insertRowsInChunks(client, 'catalog_symbol_search_signals', [
-        'migration_run_id', 'symbol_id', 'locale', 'term', 'signal_type', 'score',
+        'migration_run_id', 'symbol_id', 'locale', 'scope', 'ordinal', 'term', 'signal_type', 'score',
       ], signalRows)
       await insertRowsInChunks(client, 'catalog_symbol_variants', [
         'migration_run_id', 'symbol_id', 'variant_key', 'object_path',
@@ -477,7 +534,15 @@ export class CatalogMigrator {
   ) {
     const locales = asRecord(settings.locales, 'locales')
     const translations = asRecord(settings.batch_translations, 'batch_translations')
-    for (const [locale, localizedValue] of Object.entries(locales)) {
+    for (const signalType of ['boosts', 'use_scores'] as const) {
+      for (const [ordinal, { term, score }] of numericMap(settings[signalType], signalType).entries()) {
+        signalRows.push([
+          runId, symbolId, 'en', 'base', ordinal, term,
+          signalType === 'boosts' ? 'boost' : 'use_score', score,
+        ])
+      }
+    }
+    for (const [localeOrdinal, [locale, localizedValue]] of Object.entries(locales).entries()) {
       const localized = asRecord(localizedValue, `locales.${locale}`)
       const translated = translations[locale]
       const batchTranslation = translated === undefined
@@ -491,12 +556,15 @@ export class CatalogMigrator {
         nullableBoolean(localized.name_defaulted, `locales.${locale}.name_defaulted`),
         nullableBoolean(localized.gtn, `locales.${locale}.gtn`),
         nullableBoolean(localized.gtd, `locales.${locale}.gtd`),
-        batchTranslation,
+        batchTranslation, localeOrdinal,
       ])
       for (const signalType of ['boosts', 'use_scores'] as const) {
-        for (const { term, score } of numericMap(localized[signalType], `locales.${locale}.${signalType}`)) {
+        for (const [ordinal, { term, score }] of numericMap(
+          localized[signalType], `locales.${locale}.${signalType}`,
+        ).entries()) {
           signalRows.push([
-            runId, symbolId, locale, term, signalType === 'boosts' ? 'boost' : 'use_score', score,
+            runId, symbolId, locale, 'localization', ordinal, term,
+            signalType === 'boosts' ? 'boost' : 'use_score', score,
           ])
         }
       }
@@ -596,8 +664,8 @@ export class CatalogMigrator {
   }
 
   private async findRun(snapshotId: string) {
-    const result = await this.pool.query<{ status: string }>(
-      `SELECT status FROM catalog_migration_runs WHERE snapshot_id = $1`,
+    const result = await this.pool.query<{ id: string, status: string }>(
+      `SELECT id, status FROM catalog_migration_runs WHERE snapshot_id = $1`,
       [snapshotId],
     )
     return result.rows[0]
@@ -640,6 +708,17 @@ async function repositoryIdForKey(client: PoolClient, repoKey: string) {
   const id = result.rows[0]?.id
   if (!id) throw new CatalogMigrationDataError(`Unknown repository ${repoKey}`)
   return id
+}
+
+async function synchronizeIdentity(client: PoolClient, table: string) {
+  await client.query(
+    `SELECT setval(
+       pg_get_serial_sequence($1, 'id'),
+       GREATEST(COALESCE((SELECT max(id) FROM ${table}), 0), 1),
+       EXISTS (SELECT 1 FROM ${table})
+     )`,
+    [table],
+  )
 }
 
 async function repositoryIdsForKeys(client: PoolClient, repoKeys: string[]) {

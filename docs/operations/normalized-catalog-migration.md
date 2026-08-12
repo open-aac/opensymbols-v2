@@ -1,7 +1,8 @@
 # Normalized catalog migration
 
 The catalog migrator creates a parallel, typed PostgreSQL model without changing
-the legacy tables. It is intended for a restored snapshot or an approved
+the legacy tables. Hono and the Meilisearch exporter use this normalized model
+after verification. It is intended for a restored snapshot or an approved
 migration environment. Do not point it at production Heroku.
 
 ## Safety model
@@ -28,6 +29,12 @@ migration environment. Do not point it at production Heroku.
 
 Schema creation is idempotent. Running `migrate` again for a completed snapshot
 performs verification rather than inserting a second copy.
+If a completed normalized snapshot predates locale and search-signal ordering
+metadata, `migrate` removes only that snapshot's derived catalog rows and
+rebuilds them from the unchanged legacy source in the same transaction. Readers
+never observe the intermediate deletion, and a failed replacement restores the
+previous catalog automatically. The upgrade never assigns a shared placeholder
+ordinal to populated data.
 
 ## Commands
 
@@ -66,6 +73,8 @@ identity, counts, and fingerprint must be reviewed explicitly.
 Repositories, attribution, visibility, symbols, flags, localizations, search
 signals, variants, repository defaults, symbol requests/comments, and API
 clients have typed columns or purpose-specific child tables. Original numeric
-IDs, keys, timestamps, and shared secrets are retained. The tool does not
-switch Hono or Meilisearch to these tables; runtime cutover belongs to the next
-program issue and must compare public behavior first.
+IDs, keys, timestamps, and shared secrets are retained. Locale and search-signal
+ordinals preserve legacy object precedence where normalization would otherwise
+merge colliding keys. After `verify` succeeds, Hono and the Meilisearch exporter
+read the normalized tables; new requests and API clients are written there.
+Legacy tables remain unchanged and there is no silent runtime fallback.

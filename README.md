@@ -51,10 +51,11 @@ serves the Vite output and supports direct navigation to those client routes.
 Set `SITE_DIST_PATH` only when the site build is stored somewhere other than
 `apps/site/dist`.
 
-Hono derives its local read-only PostgreSQL connection from `POSTGRES_USER`,
+Hono derives its local PostgreSQL connection from `POSTGRES_USER`,
 `POSTGRES_PASSWORD`, `POSTGRES_DB`, and `POSTGRES_PORT`, or uses an explicit
 `DATABASE_URL`. PostgreSQL is published only on the loopback interface. The
-typed store understands the legacy GoSecure `settings` format. Hono owns
+typed store reads and writes the normalized `catalog_*` tables. Run the catalog
+migration before starting Hono against a legacy snapshot. Hono owns
 anonymous repository reads, symbol detail, random symbols, repository symbols,
 public symbol search, symbol requests, shared-secret applications, access-token
 generation, and authorized v2 search. Public API use no longer requires Rails.
@@ -199,10 +200,10 @@ iteration; semantic and hybrid search are tracked separately.
 
 ### Rebuild Meilisearch from PostgreSQL
 
-Production-shaped indexes are built from any PostgreSQL source that exposes the
-existing schema, including the restored local copy and a future Crunchy Bridge
-database. Put the connection, GoSecure, S3/CDN, Meilisearch host, scoped index
-key, and approved document limit in the ignored `.env.search-indexer` file.
+Production-shaped indexes are built from any PostgreSQL source containing the
+verified normalized catalog, including the restored local copy and a future
+Crunchy Bridge database. Put the connection, S3/CDN, Meilisearch host, scoped
+index key, and approved document limit in the ignored `.env.search-indexer` file.
 Never pass secrets on the command line.
 
 The reusable index key is separate from the runtime search key. Scope it to
@@ -254,8 +255,8 @@ writes to the source database.
 
 The TypeScript catalog migrator audits GoSecure settings, creates parallel
 typed `catalog_*` tables, verifies a stable source fingerprint and exact counts,
-and can remove only the rows owned by its snapshot. It does not switch runtime
-reads or writes. See the
+and can remove only the rows owned by its snapshot. Hono and the search exporter
+use the verified normalized catalog without decoding GoSecure. See the
 [normalized catalog migration runbook](docs/operations/normalized-catalog-migration.md)
 for mapping and reconciliation details.
 
