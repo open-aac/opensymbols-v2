@@ -9,6 +9,7 @@ export interface BetaLoadResult {
   requests: number
   errors: number
   errorRate: number
+  bootstrapFailures: Array<{ route: string; error: string }>
   missingRoutes: string[]
   p50Ms: number
   p95Ms: number
@@ -23,6 +24,7 @@ interface BetaLoadOptions {
   concurrency: number
   timeoutMs?: number
   fetchImpl?: typeof fetch
+  now?: () => number
 }
 
 interface RouteCheck {
@@ -97,13 +99,19 @@ export function percentile(values: number[], quantile: number) {
   return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * quantile) - 1)]!
 }
 
-export function evaluateBetaLoad(samples: BetaLoadSample[]): BetaLoadResult {
+export function evaluateBetaLoad(
+  samples: BetaLoadSample[],
+  bootstrapSamples: BetaLoadSample[] = [],
+): BetaLoadResult {
   const requests = samples.length
   const errors = samples.filter((sample) => sample.error).length
   const latencies = samples.map((sample) => sample.latencyMs)
   const searchLatencies = samples.filter((sample) => sample.search).map((sample) => sample.latencyMs)
   const errorRate = requests ? errors / requests : 1
   const searchP95Ms = percentile(searchLatencies, 0.95)
+  const bootstrapFailures = bootstrapSamples.flatMap((sample) => (
+    sample.error ? [{ route: sample.route, error: sample.error }] : []
+  ))
   const successfulRoutes = new Set(samples.filter((sample) => !sample.error).map((sample) => sample.route))
   const missingRoutes = betaLoadRoutes
     .map((route) => route.name)
@@ -112,12 +120,17 @@ export function evaluateBetaLoad(samples: BetaLoadSample[]): BetaLoadResult {
     requests,
     errors,
     errorRate,
+    bootstrapFailures,
     missingRoutes,
     p50Ms: percentile(latencies, 0.5),
     p95Ms: percentile(latencies, 0.95),
     p99Ms: percentile(latencies, 0.99),
     searchP95Ms,
-    passed: requests > 0 && missingRoutes.length === 0 && errorRate < 0.01 && searchP95Ms < 500,
+    passed: bootstrapFailures.length === 0
+      && requests > 0
+      && missingRoutes.length === 0
+      && errorRate < 0.01
+      && searchP95Ms < 500,
   }
 }
 
@@ -127,11 +140,10 @@ export async function runBetaLoad(options: BetaLoadOptions) {
   const baseUrl = new URL(options.baseUrl)
   if (baseUrl.protocol !== 'https:') throw new Error('beta load tests require an HTTPS origin')
   const fetchImpl = options.fetchImpl ?? fetch
+  const now = options.now ?? Date.now
   const timeoutMs = options.timeoutMs ?? 15_000
-  const samples: BetaLoadSample[] = []
-  const deadline = Date.now() + options.durationMs
 
-  const sampleRoute = async (route: RouteCheck) => {
+  const sampleRoute = async (route: RouteCheck, samples: BetaLoadSample[]) => {
     const started = performance.now()
     let error: string | undefined
     try {
@@ -144,17 +156,23 @@ export async function runBetaLoad(options: BetaLoadOptions) {
     samples.push({ route: route.name, latencyMs: performance.now() - started, search: route.search, error })
   }
 
-  // Guarantee that even a deliberately short run exercises every acceptance
-  // route. The evaluator still requires a successful sample for each route.
-  await Promise.all(betaLoadRoutes.map(sampleRoute))
+  const bootstrapSamples: BetaLoadSample[] = []
+  await Promise.all(betaLoadRoutes.map((route) => sampleRoute(route, bootstrapSamples)))
+  if (bootstrapSamples.some((sample) => sample.error)) {
+    const samples: BetaLoadSample[] = []
+    return { bootstrapSamples, samples, result: evaluateBetaLoad(samples, bootstrapSamples) }
+  }
+
+  const samples: BetaLoadSample[] = []
+  const deadline = now() + options.durationMs
 
   await Promise.all(Array.from({ length: options.concurrency }, async (_, worker) => {
     let requestNumber = worker
-    while (Date.now() < deadline) {
+    while (now() < deadline) {
       const route = betaLoadRoutes[requestNumber % betaLoadRoutes.length]!
-      await sampleRoute(route)
+      await sampleRoute(route, samples)
       requestNumber += options.concurrency
     }
   }))
-  return { samples, result: evaluateBetaLoad(samples) }
+  return { bootstrapSamples, samples, result: evaluateBetaLoad(samples, bootstrapSamples) }
 }
