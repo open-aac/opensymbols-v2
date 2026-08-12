@@ -2,6 +2,7 @@ import { verifyToken } from '@clerk/backend'
 
 export interface AppSession {
   userId: string
+  administrator: boolean
 }
 
 export interface AppSessionVerifier {
@@ -48,7 +49,7 @@ export function createClerkSessionVerifier(
           authorizedParties: options.authorizedParties,
         })
         return typeof payload.sub === 'string' && payload.sub
-          ? { userId: payload.sub }
+          ? { userId: payload.sub, administrator: payload.administrator === true }
           : null
       } catch {
         return null

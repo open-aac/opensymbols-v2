@@ -22,7 +22,7 @@ import {
   verifyAccessToken,
   type PublicApiNonce,
 } from './public-api-auth.js'
-import type { AppSessionVerifier } from './clerk-auth.js'
+import type { AppSession, AppSessionVerifier } from './clerk-auth.js'
 import type { ClerkWebhookVerifier } from './clerk-webhook.js'
 import type { CharacterStore } from './character-store.js'
 import {
@@ -57,7 +57,7 @@ export interface AppOptions {
 }
 
 export function createApp(options: AppOptions = {}) {
-  const app = new Hono()
+  const app = new Hono<{ Variables: { appSession: AppSession } }>()
   const imageOptions: PublicReadImageOptions = {
     s3Bucket: options.s3Bucket,
     s3Cdn: options.s3Cdn,
@@ -88,12 +88,17 @@ export function createApp(options: AppOptions = {}) {
       return context.json({ error: 'authentication_unconfigured' as const }, 503)
     }
 
-    const session = await options.appSessionVerifier.verify(context.req.raw)
+    let session
+    try {
+      session = await options.appSessionVerifier.verify(context.req.raw)
+    } catch {
+      return context.json({ error: 'authentication_unavailable' as const }, 503)
+    }
     if (!session) {
       return context.json({ error: 'authentication_required' as const }, 401)
     }
 
-    return context.json({ user_id: session.userId })
+    return context.json({ user_id: session.userId, administrator: session.administrator })
   })
 
   app.get('/api/app/characters', async (context) => {
@@ -201,6 +206,27 @@ export function createApp(options: AppOptions = {}) {
     } catch {
       return context.json({ error: 'database_unavailable' as const }, 503)
     }
+  })
+
+  app.use('/api/app/admin/*', async (context, next) => {
+    privateResponse(context)
+    if (!options.appSessionVerifier) {
+      return context.json({ error: 'authentication_unconfigured' as const }, 503)
+    }
+
+    let session
+    try {
+      session = await options.appSessionVerifier.verify(context.req.raw)
+    } catch {
+      return context.json({ error: 'authentication_unavailable' as const }, 503)
+    }
+    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    if (session.administrator !== true) {
+      return context.json({ error: 'administrator_required' as const }, 403)
+    }
+
+    context.set('appSession', session)
+    await next()
   })
 
   app.all('/api/app/*', (context) => context.json({ error: 'not_found' as const }, 404))

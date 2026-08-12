@@ -272,6 +272,11 @@ legacy verification key. See the
 [public API token signing runbook](docs/operations/public-api-token-signing.md)
 for the maximum 36-hour overlap, rotation, and emergency recovery procedure.
 
+Administrator access uses a strict boolean projected from Clerk public
+metadata. The [Clerk administrator runbook](docs/operations/clerk-administrators.md)
+documents the session claim, grants, revocation, audit attribution, and
+emergency recovery.
+
 ### Public beta operations
 
 The secret-free [beta launch runbook](docs/operations/beta-launch.md) records

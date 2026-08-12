@@ -19,6 +19,10 @@ function routeMetadata(pathname: string, search: string) {
     return { title: formatPageTitle('API documentation'), announcement: 'API documentation page loaded' }
   }
 
+  if (pathname === '/admin') {
+    return { title: formatPageTitle('Administrator tools'), announcement: 'Administrator tools page loaded' }
+  }
+
   if (pathname === '/sign-in' || pathname.startsWith('/sign-in/')) {
     return { title: formatPageTitle('Sign in'), announcement: 'Sign in page loaded' }
   }

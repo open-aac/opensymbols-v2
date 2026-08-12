@@ -11,7 +11,7 @@ describe('Clerk session verification', () => {
   })
 
   it('verifies a bearer token with the configured key and parties', async () => {
-    const verify = vi.fn().mockResolvedValue({ sub: 'user_example' })
+    const verify = vi.fn().mockResolvedValue({ sub: 'user_example', administrator: true })
     const verifier = createClerkSessionVerifier({
       jwtKey: 'public-key',
       authorizedParties: ['http://localhost:5173'],
@@ -20,11 +20,29 @@ describe('Clerk session verification', () => {
 
     await expect(verifier.verify(new Request('http://localhost/api/app/session', {
       headers: { Authorization: 'Bearer session-token' },
-    }))).resolves.toEqual({ userId: 'user_example' })
+    }))).resolves.toEqual({ userId: 'user_example', administrator: true })
     expect(verify).toHaveBeenCalledWith('session-token', {
       jwtKey: 'public-key',
       authorizedParties: ['http://localhost:5173'],
     })
+  })
+
+  it.each([
+    undefined,
+    false,
+    'true',
+    1,
+    { value: true },
+  ])('treats a %j administrator claim as a non-administrator', async (administrator) => {
+    const verifier = createClerkSessionVerifier({
+      jwtKey: 'public-key',
+      authorizedParties: ['http://localhost:5173'],
+      verify: vi.fn().mockResolvedValue({ sub: 'user_example', administrator }),
+    })
+
+    await expect(verifier.verify(new Request('http://localhost/api/app/session', {
+      headers: { Authorization: 'Bearer session-token' },
+    }))).resolves.toEqual({ userId: 'user_example', administrator: false })
   })
 
   it('rejects missing, malformed, invalid, and subjectless tokens', async () => {
