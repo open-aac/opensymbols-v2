@@ -296,6 +296,7 @@ describe('site layout', () => {
     ['/account/symbols', 'My Symbols | Open Symbols'],
     ['/account/packs', 'Symbol Packs | Open Symbols'],
     ['/account/settings', 'Account settings | Open Symbols'],
+    ['/admin', 'Administrator tools | Open Symbols'],
     ['/missing', 'Page not found | Open Symbols'],
   ])('sets a descriptive title for an initial load at %s', (path, title) => {
     render(<MemoryRouter initialEntries={[path]}><SiteLayout><h1>Page</h1></SiteLayout></MemoryRouter>)

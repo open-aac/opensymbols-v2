@@ -35,9 +35,11 @@ import {
 } from './features/authentication'
 import {
   AccountAreaPage,
+  AdministratorPage,
   AccountLayout,
   AccountOverviewPage,
   AccountSettingsPage,
+  RequireAdministrator,
 } from './features/account'
 import { CharacterEditorPage, CharacterLibraryPage } from './features/character-builder'
 import { useAsync } from './hooks'
@@ -478,6 +480,14 @@ export function App() {
           <Route path="packs" element={<AccountAreaPage area="packs" />} />
           <Route path="settings" element={<AccountSettingsPage />} />
         </Route>
+        <Route
+          path="/admin"
+          element={(
+            <RequireAuthentication>
+              <RequireAdministrator><AdministratorPage /></RequireAdministrator>
+            </RequireAuthentication>
+          )}
+        />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </SiteLayout>

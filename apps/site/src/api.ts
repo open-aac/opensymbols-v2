@@ -20,6 +20,7 @@ export interface SharedSecretResponse {
 
 export interface AppSessionResponse {
   user_id: string
+  administrator: boolean
 }
 
 export type CharacterSkinColour = 'original' | 'light' | 'medium-light' | 'medium' | 'medium-dark' | 'dark'

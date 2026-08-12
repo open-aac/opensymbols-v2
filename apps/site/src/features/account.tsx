@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { getAppSession } from '../api'
 import {
@@ -18,7 +18,10 @@ import {
 import { useAppAuth } from './authentication'
 import './account.css'
 
-type ServerState = 'checking' | 'verified' | 'failed'
+type ServerSessionState =
+  | { status: 'checking'; userId?: string }
+  | { status: 'failed'; userId?: string }
+  | { status: 'verified'; userId?: string; administrator: boolean }
 
 const navigation = [
   { label: 'Overview', to: '/account', end: true },
@@ -46,10 +49,37 @@ function ProfileAvatar() {
   return <Avatar className="account-profile__avatar" imageUrl={auth.imageUrl} name={auth.displayName} />
 }
 
-function SessionNotice({ state }: { state: ServerState }) {
-  if (state === 'verified') return null
+function useServerSession(): ServerSessionState {
+  const auth = useAppAuth()
+  const [resolvedState, setResolvedState] = useState<ServerSessionState>({
+    status: 'checking',
+    userId: auth.userId,
+  })
 
-  if (state === 'checking') {
+  useEffect(() => {
+    let active = true
+    getAppSession(auth.getToken)
+      .then((session) => {
+        if (!active) return
+        setResolvedState(session.user_id === auth.userId
+          ? { status: 'verified', userId: auth.userId, administrator: session.administrator === true }
+          : { status: 'failed', userId: auth.userId })
+      })
+      .catch(() => {
+        if (active) setResolvedState({ status: 'failed', userId: auth.userId })
+      })
+    return () => { active = false }
+  }, [auth.getToken, auth.userId])
+
+  return resolvedState.userId === auth.userId
+    ? resolvedState
+    : { status: 'checking' as const, userId: auth.userId }
+}
+
+function SessionNotice({ state }: { state: ServerSessionState }) {
+  if (state.status === 'verified') return null
+
+  if (state.status === 'checking') {
     return <StatusMessage className="account-session" status="status">Checking your secure server session…</StatusMessage>
   }
 
@@ -62,19 +92,7 @@ function SessionNotice({ state }: { state: ServerState }) {
 
 export function AccountLayout() {
   const auth = useAppAuth()
-  const [serverState, setServerState] = useState<ServerState>('checking')
-
-  useEffect(() => {
-    let active = true
-    getAppSession(auth.getToken)
-      .then((session) => {
-        if (active) setServerState(session.user_id === auth.userId ? 'verified' : 'failed')
-      })
-      .catch(() => {
-        if (active) setServerState('failed')
-      })
-    return () => { active = false }
-  }, [auth.getToken, auth.userId])
+  const serverState = useServerSession()
 
   return (
     <PageSection className="account-dashboard">
@@ -99,11 +117,62 @@ export function AccountLayout() {
               {label}
             </NavLink>
           ))}
+          {serverState.status === 'verified' && serverState.administrator && (
+            <NavLink
+              className={({ isActive }) => `account-navigation__link${isActive ? ' account-navigation__link--active' : ''}`}
+              to="/admin"
+            >
+              Administrator
+            </NavLink>
+          )}
         </nav>
         <Surface className="account-dashboard__content min-w-0">
           <Outlet />
         </Surface>
       </div>
+    </PageSection>
+  )
+}
+
+export function RequireAdministrator({ children }: { children: ReactNode }) {
+  const state = useServerSession()
+
+  if (state.status === 'checking') {
+    return <PageSection><StatusMessage status="status">Checking administrator access…</StatusMessage></PageSection>
+  }
+  if (state.status === 'failed') {
+    return (
+      <PageSection>
+        <StatusMessage status="alert">
+          Administrator access could not be verified. Try signing in again if this continues.
+        </StatusMessage>
+      </PageSection>
+    )
+  }
+  if (!state.administrator) {
+    return (
+      <PageSection className="account-section">
+        <p className="eyebrow">Administrator access</p>
+        <h1>Administrator access required</h1>
+        <p>Your account does not have permission to use Open Symbols administrator tools.</p>
+        <ButtonLink to="/account">Return to your account</ButtonLink>
+      </PageSection>
+    )
+  }
+
+  return children
+}
+
+export function AdministratorPage() {
+  return (
+    <PageSection className="account-section">
+      <p className="eyebrow">Open Symbols administration</p>
+      <h1>Administrator tools</h1>
+      <EmptyState
+        heading="Library imports are coming next"
+        description="Your administrator access is verified. Upload and review tools will appear here in the next implementation stage."
+        action={<ButtonLink to="/account">Return to your account</ButtonLink>}
+      />
     </PageSection>
   )
 }
