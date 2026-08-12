@@ -4,7 +4,7 @@ import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { Pool, type PoolClient, type QueryResultRow } from 'pg'
 import { writeJsonl } from './jsonl.js'
-import { decodeGoSecure, objectValue, type JsonValue } from './secure.js'
+import type { JsonValue } from './secure.js'
 import type { RepositoryDocument, SearchDocument } from './types.js'
 
 export const POSTGRES_EXPORT_GENERATOR = 'opensymbols-postgres-search-export-v1'
@@ -13,24 +13,51 @@ const OWNERSHIP_FILE = '.opensymbols-search-export.json'
 interface RepositoryRow extends QueryResultRow {
   id: number
   repo_key: string
-  settings: string | null
+  name: string | null
+  description: string | null
+  website_url: string | null
+  active: boolean
+  protected: boolean
+  attribution_license: string | null
+  attribution_license_url: string | null
+  attribution_author_name: string | null
+  attribution_author_url: string | null
 }
 
 interface ModifierRow extends QueryResultRow {
-  id: number
   repo_key: string
-  locale: string | null
-  settings: string | null
+  locale: string
+  search_term: string
+  symbol_key: string
 }
 
-interface SymbolRow extends QueryResultRow {
-  id: number
+interface SearchSymbolRow {
+  id: number | string
   repo_key: string
   symbol_key: string
   enabled: boolean | null
   has_skin: boolean | null
   unsafe_result: boolean | null
-  settings: string | null
+  settings?: null
+}
+
+interface SymbolRow extends QueryResultRow, SearchSymbolRow {
+  name: string | null
+  description: string | null
+  settings_enabled: boolean | null
+  settings_has_skin: boolean | null
+  settings_unsafe: boolean | null
+  has_variants: boolean
+  protected_symbol: boolean
+  image_url: string | null
+  file_extension: string | null
+  license: string | null
+  license_url: string | null
+  author: string | null
+  author_url: string | null
+  source_url: string | null
+  search_string: string | null
+  locales: Record<string, JsonValue>
 }
 
 type Settings = Record<string, JsonValue>
@@ -53,7 +80,6 @@ export interface PostgresExportManifest {
 
 export interface PostgresExportOptions {
   connectionString: string
-  encryptionKey: string
   s3Bucket: string
   s3Cdn: string
   snapshotId: string
@@ -64,15 +90,6 @@ export interface PostgresExportOptions {
 
 function stringValue(value: JsonValue | undefined) {
   return typeof value === 'string' ? value : null
-}
-
-function settings(value: string | null, encryptionKey: string, identity: string): Settings {
-  if (!value) throw new Error(`Missing secure settings for ${identity}.`)
-  try {
-    return objectValue(decodeGoSecure(value, encryptionKey))
-  } catch {
-    throw new Error(`Unable to decode secure settings for ${identity}.`)
-  }
 }
 
 function recordValue(value: JsonValue | undefined): Settings {
@@ -138,7 +155,7 @@ function documentText(
 }
 
 export function searchDocumentsForSymbol(
-  row: SymbolRow,
+  row: SearchSymbolRow,
   symbol: Settings,
   defaults: Map<string, string[]>,
   image: { bucket: string; cdn: string },
@@ -168,7 +185,7 @@ export function searchDocumentsForSymbol(
     if (locale !== 'en' && !name && !description && !searchTerms.length && !boosts.size) continue
     documents.push({
       id: `${row.id}_${locale.replaceAll('-', '_')}`,
-      symbolId: row.id,
+      symbolId: Number(row.id),
       symbolKey: row.symbol_key,
       repoKey: row.repo_key,
       locale,
@@ -248,39 +265,76 @@ function repositoryDocument(repoKey: string, value: Settings, symbolCount: numbe
   }
 }
 
-async function loadRepositories(client: PoolClient, encryptionKey: string) {
-  const rows = await client.query<RepositoryRow>('SELECT id, repo_key, settings FROM symbol_repositories ORDER BY id')
+async function loadRepositories(client: PoolClient) {
+  const rows = await client.query<RepositoryRow>(
+    `SELECT id, repo_key, name, description, website_url, active, protected,
+            attribution_license, attribution_license_url, attribution_author_name,
+            attribution_author_url
+     FROM catalog_repositories ORDER BY id`,
+  )
   const all = new Map<string, Settings>()
   const publicRepositories = new Map<string, Settings>()
   for (const row of rows.rows) {
-    const value = settings(row.settings, encryptionKey, `repository ${row.repo_key}`)
+    const value: Settings = {
+      name: row.name,
+      description: row.description,
+      url: row.website_url,
+      active: row.active,
+      protected: row.protected,
+      default_attribution: {
+        license: row.attribution_license,
+        license_url: row.attribution_license_url,
+        author_name: row.attribution_author_name,
+        author_url: row.attribution_author_url,
+      },
+    }
     all.set(row.repo_key, value)
     if (value.active !== false && value.protected !== true) publicRepositories.set(row.repo_key, value)
   }
   return { all, publicRepositories }
 }
 
-async function loadDefaults(client: PoolClient, encryptionKey: string) {
+async function loadDefaults(client: PoolClient) {
   const rows = await client.query<ModifierRow>(
-    'SELECT id, repo_key, locale, settings FROM repository_modifiers ORDER BY id',
+    `SELECT repository.repo_key, defaults.locale, defaults.search_term, defaults.symbol_key
+     FROM catalog_repository_defaults defaults
+     JOIN catalog_repositories repository ON repository.id = defaults.repository_id
+     ORDER BY repository.repo_key, defaults.locale, defaults.search_term`,
   )
   const result = new Map<string, Map<string, string[]>>()
   for (const row of rows.rows) {
-    const value = settings(row.settings, encryptionKey, `repository modifier ${row.id}`)
-    const locale = normalizeLocale(row.locale || 'en')
-    const defaults = recordValue(value.defaults)
+    const locale = normalizeLocale(row.locale)
     let repo = result.get(row.repo_key)
     if (!repo) {
       repo = new Map()
       result.set(row.repo_key, repo)
     }
-    for (const [term, symbolKey] of Object.entries(defaults)) {
-      if (typeof symbolKey !== 'string' || !term.trim()) continue
-      const key = `${locale}\0${symbolKey}`
-      repo.set(key, [...(repo.get(key) ?? []), term.trim().toLowerCase()].sort())
-    }
+    if (!row.search_term.trim()) continue
+    const key = `${locale}\0${row.symbol_key}`
+    repo.set(key, [...(repo.get(key) ?? []), row.search_term.trim().toLowerCase()].sort())
   }
   return result
+}
+
+function settingsForSymbol(row: SymbolRow): Settings {
+  return {
+    name: row.name,
+    description: row.description,
+    enabled: row.settings_enabled,
+    has_skin: row.settings_has_skin,
+    unsafe_result: row.settings_unsafe,
+    has_variants: row.has_variants,
+    protected_symbol: row.protected_symbol,
+    image_url: row.image_url,
+    file_extension: row.file_extension,
+    license: row.license,
+    license_url: row.license_url,
+    author: row.author,
+    author_url: row.author_url,
+    source_url: row.source_url,
+    search_string: row.search_string,
+    locales: row.locales,
+  }
 }
 
 export async function exportPostgresSearchData(options: PostgresExportOptions) {
@@ -292,8 +346,8 @@ export async function exportPostgresSearchData(options: PostgresExportOptions) {
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
     const versionResult = await client.query<{ server_version: string }>('SHOW server_version')
-    const { all, publicRepositories } = await loadRepositories(client, options.encryptionKey)
-    const defaults = await loadDefaults(client, options.encryptionKey)
+    const { all, publicRepositories } = await loadRepositories(client)
+    const defaults = await loadDefaults(client)
     const counts = new Map<string, number>()
     const locales = new Map<string, number>()
     const excluded = { repositories: all.size - publicRepositories.size, disabledSymbols: 0, protectedSymbols: 0, hiddenRepositorySymbols: 0 }
@@ -306,14 +360,40 @@ export async function exportPostgresSearchData(options: PostgresExportOptions) {
     async function* documents(): AsyncGenerator<SearchDocument> {
       while (true) {
         const result = await client.query<SymbolRow>(
-          `SELECT id, repo_key, symbol_key, enabled, has_skin, unsafe_result, settings
-           FROM picture_symbols WHERE id > $1 ORDER BY id LIMIT $2`,
+          `SELECT symbol.id, repository.repo_key, symbol.symbol_key,
+                  symbol.row_enabled AS enabled, symbol.row_has_skin AS has_skin,
+                  symbol.row_unsafe AS unsafe_result, symbol.name, symbol.description,
+                  symbol.settings_enabled, symbol.settings_has_skin, symbol.settings_unsafe,
+                  symbol.has_variants, symbol.protected_symbol, symbol.image_url,
+                  symbol.file_extension, symbol.license, symbol.license_url, symbol.author,
+                  symbol.author_url, symbol.source_url, symbol.search_string,
+                  COALESCE(localized.locales, '{}'::json) AS locales
+           FROM catalog_symbols symbol
+           JOIN catalog_repositories repository ON repository.id = symbol.repository_id
+           LEFT JOIN LATERAL (
+             SELECT json_object_agg(localization.locale, json_strip_nulls(json_build_object(
+               'name', localization.name,
+               'description', localization.description,
+               'search_string', localization.search_string,
+               'use_scores', COALESCE((
+                 SELECT json_object_agg(signal.term, signal.score ORDER BY signal.ordinal)
+                 FROM catalog_symbol_search_signals signal
+                 WHERE signal.symbol_id = localization.symbol_id
+                   AND signal.locale = localization.locale
+                   AND signal.scope = 'localization'
+                   AND signal.signal_type = 'use_score'
+               ), '{}'::json)
+             )) ORDER BY localization.ordinal) AS locales
+             FROM catalog_symbol_localizations localization
+             WHERE localization.symbol_id = symbol.id
+           ) localized ON true
+           WHERE symbol.id > $1 ORDER BY symbol.id LIMIT $2`,
           [lastId, options.batchSize ?? 500],
         )
         if (!result.rows.length) break
         for (const row of result.rows) {
-          lastId = row.id
-          const value = settings(row.settings, options.encryptionKey, `symbol ${row.id}`)
+          lastId = Number(row.id)
+          const value = settingsForSymbol(row)
           if (!publicRepositories.has(row.repo_key)) {
             excluded.hiddenRepositorySymbols += 1
             continue
@@ -332,8 +412,9 @@ export async function exportPostgresSearchData(options: PostgresExportOptions) {
           )
           symbolCount += 1
           counts.set(row.repo_key, (counts.get(row.repo_key) ?? 0) + 1)
-          minimum = minimum === null ? row.id : Math.min(minimum, row.id)
-          maximum = maximum === null ? row.id : Math.max(maximum, row.id)
+          const numericId = Number(row.id)
+          minimum = minimum === null ? numericId : Math.min(minimum, numericId)
+          maximum = maximum === null ? numericId : Math.max(maximum, numericId)
           for (const document of generated) {
             documentCount += 1
             locales.set(document.locale, (locales.get(document.locale) ?? 0) + 1)

@@ -11,7 +11,6 @@ const port = Number.parseInt(process.env.PORT ?? '3000', 10)
 const siteRoot = process.env.SITE_DIST_PATH ?? fileURLToPath(new URL('../../site/dist', import.meta.url))
 const publicReadStore = createPostgresPublicReadStore({
   connectionString: databaseUrlFromEnvironment(),
-  encryptionKey: process.env.SECURE_ENCRYPTION_KEY,
 })
 const imageOptions = { s3Bucket: process.env.S3_BUCKET, s3Cdn: process.env.S3_CDN }
 const discoveryCatalog = discoveryCatalogFromEnvironment(publicReadStore, imageOptions)

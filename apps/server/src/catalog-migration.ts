@@ -175,6 +175,8 @@ export class CatalogMigrator {
       await this.migrateSymbols(client, runId)
       await this.migrateRequests(client, runId)
       await this.migrateApiClients(client, runId)
+      await synchronizeIdentity(client, 'catalog_symbol_requests')
+      await synchronizeIdentity(client, 'catalog_api_clients')
 
       const normalizedCounts = await normalizedBaseCounts(client)
       const reconciliationResult = await client.query<{ count: string }>(
@@ -448,10 +450,10 @@ export class CatalogMigrator {
       ], symbolRows)
       await insertRowsInChunks(client, 'catalog_symbol_localizations', [
         'migration_run_id', 'symbol_id', 'locale', 'name', 'description', 'search_string',
-        'name_defaulted', 'generated_name', 'generated_description', 'batch_translation',
+        'name_defaulted', 'generated_name', 'generated_description', 'batch_translation', 'ordinal',
       ], localizationRows)
       await insertRowsInChunks(client, 'catalog_symbol_search_signals', [
-        'migration_run_id', 'symbol_id', 'locale', 'term', 'signal_type', 'score',
+        'migration_run_id', 'symbol_id', 'locale', 'scope', 'ordinal', 'term', 'signal_type', 'score',
       ], signalRows)
       await insertRowsInChunks(client, 'catalog_symbol_variants', [
         'migration_run_id', 'symbol_id', 'variant_key', 'object_path',
@@ -477,7 +479,15 @@ export class CatalogMigrator {
   ) {
     const locales = asRecord(settings.locales, 'locales')
     const translations = asRecord(settings.batch_translations, 'batch_translations')
-    for (const [locale, localizedValue] of Object.entries(locales)) {
+    for (const signalType of ['boosts', 'use_scores'] as const) {
+      for (const [ordinal, { term, score }] of numericMap(settings[signalType], signalType).entries()) {
+        signalRows.push([
+          runId, symbolId, 'en', 'base', ordinal, term,
+          signalType === 'boosts' ? 'boost' : 'use_score', score,
+        ])
+      }
+    }
+    for (const [localeOrdinal, [locale, localizedValue]] of Object.entries(locales).entries()) {
       const localized = asRecord(localizedValue, `locales.${locale}`)
       const translated = translations[locale]
       const batchTranslation = translated === undefined
@@ -491,12 +501,15 @@ export class CatalogMigrator {
         nullableBoolean(localized.name_defaulted, `locales.${locale}.name_defaulted`),
         nullableBoolean(localized.gtn, `locales.${locale}.gtn`),
         nullableBoolean(localized.gtd, `locales.${locale}.gtd`),
-        batchTranslation,
+        batchTranslation, localeOrdinal,
       ])
       for (const signalType of ['boosts', 'use_scores'] as const) {
-        for (const { term, score } of numericMap(localized[signalType], `locales.${locale}.${signalType}`)) {
+        for (const [ordinal, { term, score }] of numericMap(
+          localized[signalType], `locales.${locale}.${signalType}`,
+        ).entries()) {
           signalRows.push([
-            runId, symbolId, locale, term, signalType === 'boosts' ? 'boost' : 'use_score', score,
+            runId, symbolId, locale, 'localization', ordinal, term,
+            signalType === 'boosts' ? 'boost' : 'use_score', score,
           ])
         }
       }
@@ -640,6 +653,17 @@ async function repositoryIdForKey(client: PoolClient, repoKey: string) {
   const id = result.rows[0]?.id
   if (!id) throw new CatalogMigrationDataError(`Unknown repository ${repoKey}`)
   return id
+}
+
+async function synchronizeIdentity(client: PoolClient, table: string) {
+  await client.query(
+    `SELECT setval(
+       pg_get_serial_sequence($1, 'id'),
+       GREATEST(COALESCE((SELECT max(id) FROM ${table}), 0), 1),
+       EXISTS (SELECT 1 FROM ${table})
+     )`,
+    [table],
+  )
 }
 
 async function repositoryIdsForKeys(client: PoolClient, repoKeys: string[]) {

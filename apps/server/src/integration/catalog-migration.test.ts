@@ -72,6 +72,7 @@ databaseIntegration('CatalogMigrator integration', () => {
         [
           `**${JSON.stringify({
             name: 'Cup', enabled: true, has_skin: true, has_variants: true,
+            use_scores: { vessel: 3 },
             image_url: 'https://cdn.example/cup.svg', file_extension: 'svg',
             locales: { en: { name: 'Cup\0', search_string: 'cup drink', boosts: { cup: 4 }, uses: { cup: [1] } } },
             variant_paths: { dark: 'cup-dark.svg' }, skin_spots: [1],
@@ -131,6 +132,14 @@ databaseIntegration('CatalogMigrator integration', () => {
          WHERE symbol_id = 101 AND locale = 'en'`,
       )
       expect(locale.rows[0]).toEqual({ name: 'Cup', search_string: 'cup drink' })
+      const baseSignal = await database.query(
+        `SELECT locale, scope, term, signal_type, score
+         FROM catalog_symbol_search_signals
+         WHERE symbol_id = 101 AND scope = 'base'`,
+      )
+      expect(baseSignal.rows).toEqual([{
+        locale: 'en', scope: 'base', term: 'vessel', signal_type: 'use_score', score: 3,
+      }])
       const reconciliation = await database.query(
         `SELECT field_path, value_sha256, action, result
          FROM catalog_migration_reconciliations`,
