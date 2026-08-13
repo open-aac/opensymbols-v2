@@ -125,6 +125,28 @@ describe('LibraryImportEngine', () => {
     expect(store.completed?.results[0]?.code).toBe('archive_invalid')
   })
 
+  it('retries a malformed archive when extracted-object cleanup is unavailable', async () => {
+    const store = new FakeStore()
+    const storage = new FakeStorage()
+    const engine = new LibraryImportEngine(store, storage, { now: () => now, id: () => id })
+    await engine.createDraft('user_admin', 'new_library', null)
+    await engine.completeUpload(id, 'user_admin')
+    store.lease = {
+      id: '22222222-2222-4222-8222-222222222222', importId: id, attempts: 1,
+      leaseOwner: 'worker-a', leaseExpiresAt: '2026-08-13T10:05:00.000Z', actorClerkUserId: 'user_admin',
+    }
+    vi.spyOn(storage, 'deletePrefix')
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('cleanup unavailable'))
+
+    await expect(engine.processNextValidation('worker-a')).rejects.toThrow(/cleanup unavailable/)
+    expect(store.completed).toBeNull()
+    expect(store.retry).toEqual([
+      '22222222-2222-4222-8222-222222222222', 'worker-a', 'quarantine_cleanup_unavailable',
+      '2026-08-13T10:00:00.000Z', '2026-08-13T10:00:05.000Z',
+    ])
+  })
+
   it('requeues infrastructure failures with bounded exponential delay', async () => {
     const store = new FakeStore()
     const storage = new FakeStorage()

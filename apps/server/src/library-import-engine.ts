@@ -124,9 +124,22 @@ export class LibraryImportEngine {
         ? 'invalid' as const : 'review_ready' as const }
     } catch (error) {
       if (error instanceof ImportArchiveError) {
-        // Invalid archives can leave private extracted objects behind. Their
-        // removal is best effort here and is guaranteed again at expiry.
-        await this.storage.deletePrefix(`imports/${draft.id}/extracted/`).catch(() => undefined)
+        // Invalid archives can fail after earlier entries were written. Do
+        // not complete validation until those private objects are confirmed
+        // deleted. A storage failure remains a durable retryable job.
+        try {
+          await this.storage.deletePrefix(`imports/${draft.id}/extracted/`)
+        } catch (cleanupError) {
+          const retryAt = new Date(this.now().getTime() + retryDelayMilliseconds(lease.attempts)).toISOString()
+          await this.store.retryValidation(
+            lease.id,
+            workerId,
+            'quarantine_cleanup_unavailable',
+            this.now().toISOString(),
+            retryAt,
+          )
+          throw cleanupError
+        }
         await this.store.completeValidation({
           jobId: lease.id,
           workerId,
