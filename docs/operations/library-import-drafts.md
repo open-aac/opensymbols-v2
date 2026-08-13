@@ -1,6 +1,6 @@
 # Draft library import operations
 
-This is the private processing foundation for administrator library imports. It does not expose an HTTP API or publish catalog records. Those workflows are separate issues in the administrator import program.
+This is the private processing foundation for administrator library imports. The administrator API and review interface expose its draft lifecycle, but it does not publish catalog records.
 
 ## Storage boundary
 
@@ -34,13 +34,15 @@ Apply the draft schema after the normalized catalog schema exists:
 pnpm import:drafts:schema
 ```
 
+Run this as a deployment migration using an administrative database credential. The application does not apply DDL at startup, so its restricted runtime role needs only data access to the import tables.
+
 Run one durable validation job:
 
 ```text
 pnpm import:drafts:work
 ```
 
-The worker claims one PostgreSQL job with `FOR UPDATE SKIP LOCKED`, a five-minute lease, and an owned worker identity. A crashed job becomes claimable after its lease expires. Operational failures are requeued with bounded exponential delay. Invalid archives complete as reviewable validation failures instead of retrying forever.
+The server polls for durable validation jobs while it is running; `import:drafts:work` remains available for an explicit one-job operational run. The worker claims one PostgreSQL job with `FOR UPDATE SKIP LOCKED`, a five-minute lease, and an owned worker identity. A crashed job becomes claimable after its lease expires. Operational failures are requeued with bounded exponential delay. Invalid archives complete as reviewable validation failures instead of retrying forever.
 
 Run expiry from an authenticated administrator operation or an approved scheduled task whose actor value is recorded in the audit trail:
 
@@ -58,4 +60,4 @@ Archive paths are case-sensitive, NFC-normalized POSIX paths. Absolute paths, pa
 
 ## Recovery
 
-Draft state and audit events are authoritative in PostgreSQL. Do not infer state from object presence. Re-running a validation lease removes its previous private extracted prefix and replaces the prior file/results rows transactionally. Administrators share organizational draft visibility; API authorization and review UI arrive in the next child issue.
+Draft state and audit events are authoritative in PostgreSQL. Do not infer state from object presence. Re-running a validation lease removes its previous private extracted prefix and replaces the prior file/results rows transactionally. Administrators share organizational draft visibility through the Clerk-authorized API and review interface. Publication remains a separate child issue.

@@ -3,6 +3,7 @@ dist/
 coverage/
 .benchmark-data/
 .search-data/
+.import-quarantine/
 *.log
 .env
 .env.*

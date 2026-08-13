@@ -42,6 +42,7 @@ export class LibraryImportEngine {
     actorClerkUserId: string,
     kind: LibraryImportKind,
     repositoryId: number | null,
+    metadata?: Parameters<ImportDraftStore['createDraft']>[0]['metadata'],
   ): Promise<CreatedLibraryImport> {
     if (!actorClerkUserId) throw new LibraryImportInputError('A verified administrator actor is required.')
     if ((kind === 'new_library' && repositoryId !== null)
@@ -57,6 +58,7 @@ export class LibraryImportEngine {
       repositoryId,
       uploadObjectKey,
       actorClerkUserId,
+      metadata,
       now: now.toISOString(),
       expiresAt: new Date(now.getTime() + 30 * dayMilliseconds).toISOString(),
     })

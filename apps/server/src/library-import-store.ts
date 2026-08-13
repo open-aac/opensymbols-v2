@@ -12,6 +12,12 @@ interface ImportRow extends QueryResultRow {
   created_at: Date | string
   updated_at: Date | string
   expires_at: Date | string
+  upload_size: number | string | null
+  repository_key: string | null
+  repository_name: string | null
+  default_license: string | null
+  license_url: string | null
+  attribution_name: string | null
 }
 
 interface JobRow extends QueryResultRow {
@@ -46,6 +52,11 @@ function draft(row: ImportRow): LibraryImportDraft {
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
     expiresAt: iso(row.expires_at),
+    repositoryKey: row.repository_key,
+    repositoryName: row.repository_name,
+    defaultLicense: row.default_license,
+    licenseUrl: row.license_url,
+    attributionName: row.attribution_name,
   }
 }
 
@@ -95,11 +106,15 @@ export class PostgresImportDraftStore implements ImportDraftStore {
       const inserted = await client.query<ImportRow>(
         `INSERT INTO library_imports
           (id, kind, repository_id, status, upload_object_key, uploader_clerk_user_id,
-           created_at, updated_at, expires_at)
-         VALUES ($1, $2, $3, 'awaiting_upload', $4, $5, $6, $6, $7)
+           created_at, updated_at, expires_at, repository_key, repository_name,
+           default_license, license_url, attribution_name)
+         VALUES ($1, $2, $3, 'awaiting_upload', $4, $5, $6, $6, $7, $8, $9, $10, $11, $12)
          RETURNING *`,
         [input.id, input.kind, input.repositoryId, input.uploadObjectKey,
-          input.actorClerkUserId, input.now, input.expiresAt],
+          input.actorClerkUserId, input.now, input.expiresAt,
+          input.metadata?.repositoryKey ?? null, input.metadata?.repositoryName ?? null,
+          input.metadata?.defaultLicense ?? null, input.metadata?.licenseUrl ?? null,
+          input.metadata?.attributionName ?? null],
       )
       await audit(client, input.id, input.actorClerkUserId, 'draft_created', input.now, { kind: input.kind })
       return draft(inserted.rows[0]!)
@@ -109,6 +124,80 @@ export class PostgresImportDraftStore implements ImportDraftStore {
   async findDraft(importId: string) {
     const query = await this.pool.query<ImportRow>('SELECT * FROM library_imports WHERE id = $1', [importId])
     return query.rows[0] ? draft(query.rows[0]) : null
+  }
+
+  async listDrafts() {
+    const query = await this.pool.query<ImportRow>(
+      `SELECT * FROM library_imports ORDER BY updated_at DESC, id DESC`,
+    )
+    return query.rows.map(draft)
+  }
+
+  async findDraftDetail(importId: string) {
+    const importQuery = await this.pool.query<ImportRow>('SELECT * FROM library_imports WHERE id = $1', [importId])
+    const row = importQuery.rows[0]
+    if (!row) return null
+    const [files, findings, auditEvents] = await Promise.all([
+      this.pool.query<{
+        normalized_path: string; media_type: 'image/svg+xml' | 'image/png' | 'image/jpeg' | 'application/json'
+        byte_size: number | string; sha256: string; sanitized: boolean
+      } & QueryResultRow>(
+        `SELECT normalized_path, media_type, byte_size, sha256, sanitized
+         FROM library_import_files WHERE import_id = $1 ORDER BY normalized_path`, [importId],
+      ),
+      this.pool.query<{
+        normalized_path: string | null; code: string; severity: 'error' | 'warning'; message: string
+        details: Record<string, string | number | boolean | null>
+      } & QueryResultRow>(
+        `SELECT normalized_path, code, severity, message, details
+         FROM library_import_validation_results WHERE import_id = $1 ORDER BY id`, [importId],
+      ),
+      this.pool.query<{ actor_clerk_user_id: string; event_type: string; created_at: Date | string } & QueryResultRow>(
+        `SELECT actor_clerk_user_id, event_type, created_at
+         FROM library_import_audit_events WHERE import_id = $1 ORDER BY id`, [importId],
+      ),
+    ])
+    return {
+      ...draft(row),
+      uploadSize: row.upload_size === null ? null : Number(row.upload_size),
+      files: files.rows.map((file) => ({
+        path: file.normalized_path,
+        mediaType: file.media_type,
+        size: Number(file.byte_size),
+        sha256: file.sha256,
+        sanitized: file.sanitized,
+      })),
+      results: findings.rows.map((finding) => ({
+        path: finding.normalized_path,
+        code: finding.code,
+        severity: finding.severity,
+        message: finding.message,
+        details: finding.details,
+      })),
+      auditEvents: auditEvents.rows.map((event) => ({
+        actorClerkUserId: event.actor_clerk_user_id,
+        eventType: event.event_type,
+        createdAt: iso(event.created_at),
+      })),
+    }
+  }
+
+  async publicRepositoryExists(repositoryId: number) {
+    const query = await this.pool.query(
+      `SELECT 1 FROM catalog_repositories WHERE id = $1 AND active = true AND protected = false`,
+      [repositoryId],
+    )
+    return query.rowCount === 1
+  }
+
+  async listPublicRepositories() {
+    const query = await this.pool.query<{ id: number | string; repository_key: string; name: string }>(
+      `SELECT id, repository_key, name
+       FROM catalog_repositories
+       WHERE active = true AND protected = false
+       ORDER BY lower(name), id`,
+    )
+    return query.rows.map((row) => ({ id: Number(row.id), key: row.repository_key, name: row.name }))
   }
 
   async markUploaded(importId: string, actorClerkUserId: string, size: number, now: string) {

@@ -29,6 +29,29 @@ export interface LibraryImportDraft {
   createdAt: string
   updatedAt: string
   expiresAt: string
+  repositoryKey?: string | null
+  repositoryName?: string | null
+  defaultLicense?: string | null
+  licenseUrl?: string | null
+  attributionName?: string | null
+}
+
+export interface LibraryImportDetail extends LibraryImportDraft {
+  uploadSize: number | null
+  files: Array<Omit<ValidatedImportFile, 'objectKey'>>
+  results: ImportValidationResult[]
+  auditEvents: Array<{
+    actorClerkUserId: string
+    metadata?: {
+      repositoryKey: string
+      repositoryName: string
+      defaultLicense: string
+      licenseUrl: string
+      attributionName: string
+    }
+    eventType: string
+    createdAt: string
+  }>
 }
 
 export interface ImportValidationResult {
@@ -58,6 +81,7 @@ export interface ImportJobLease {
 }
 
 export interface PresignedUpload {
+  method: 'post' | 'put'
   url: string
   fields: Record<string, string>
   objectKey: string
@@ -76,6 +100,7 @@ export interface ImportObjectStorage {
   read(objectKey: string): Promise<Readable>
   write(objectKey: string, body: Buffer, contentType: string): Promise<void>
   deletePrefix(prefix: string): Promise<void>
+  acceptUpload?(objectKey: string, body: Readable, maximumBytes: number): Promise<void>
 }
 
 export interface ImportDraftStore {
@@ -87,8 +112,19 @@ export interface ImportDraftStore {
     actorClerkUserId: string
     now: string
     expiresAt: string
+    metadata?: {
+      repositoryKey: string
+      repositoryName: string
+      defaultLicense: string
+      licenseUrl: string
+      attributionName: string
+    }
   }): Promise<LibraryImportDraft>
   findDraft(importId: string): Promise<LibraryImportDraft | null>
+  listDrafts(): Promise<LibraryImportDraft[]>
+  findDraftDetail(importId: string): Promise<LibraryImportDetail | null>
+  listPublicRepositories(): Promise<Array<{ id: number; key: string; name: string }>>
+  publicRepositoryExists(repositoryId: number): Promise<boolean>
   markUploaded(importId: string, actorClerkUserId: string, size: number, now: string): Promise<void>
   claimValidationJob(workerId: string, now: string, leaseExpiresAt: string): Promise<ImportJobLease | null>
   renewValidationLease(jobId: string, workerId: string, now: string, leaseExpiresAt: string): Promise<void>
