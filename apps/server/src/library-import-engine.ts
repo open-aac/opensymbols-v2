@@ -102,7 +102,15 @@ export class LibraryImportEngine {
     try {
       await this.store.beginValidation(draft.id, lease.actorClerkUserId, this.now().toISOString())
       await this.storage.deletePrefix(`imports/${draft.id}/extracted/`)
-      const output = await validateLibraryArchive(this.storage, draft)
+      const output = await validateLibraryArchive(this.storage, draft, async () => {
+        const renewedAt = this.now()
+        await this.store.renewValidationLease(
+          lease.id,
+          workerId,
+          renewedAt.toISOString(),
+          new Date(renewedAt.getTime() + leaseMilliseconds).toISOString(),
+        )
+      })
       await this.store.completeValidation({
         jobId: lease.id,
         workerId,
@@ -131,7 +139,15 @@ export class LibraryImportEngine {
         return { importId: draft.id, status: 'invalid' as const }
       }
       const retryAt = new Date(this.now().getTime() + retryDelayMilliseconds(lease.attempts)).toISOString()
-      await this.store.retryValidation(lease.id, workerId, 'validation_unavailable', this.now().toISOString(), retryAt)
+      try {
+        await this.store.retryValidation(lease.id, workerId, 'validation_unavailable', this.now().toISOString(), retryAt)
+      } catch (leaseError) {
+        // Expiry or cancellation can fence a worker while it is validating.
+        // The worker owns the final cleanup after all of its writes have
+        // settled, so an object cannot appear after cleanup is recorded.
+        await this.storage.deletePrefix(`imports/${draft.id}/extracted/`)
+        throw leaseError
+      }
       throw error
     }
   }

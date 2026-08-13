@@ -172,6 +172,20 @@ export class PostgresImportDraftStore implements ImportDraftStore {
     })
   }
 
+  async renewValidationLease(jobId: string, workerId: string, now: string, leaseExpiresAt: string) {
+    const renewed = await this.pool.query(
+      `UPDATE library_import_jobs jobs
+       SET lease_expires_at = $4, updated_at = $3
+       FROM library_imports imports
+       WHERE jobs.id = $1 AND jobs.lease_owner = $2 AND jobs.status = 'leased'
+         AND jobs.import_id = imports.id
+         AND imports.status = 'validating' AND imports.expires_at > $3
+       RETURNING jobs.id`,
+      [jobId, workerId, now, leaseExpiresAt],
+    )
+    if (renewed.rowCount !== 1) throw new ImportStateConflictError('Validation job lease is no longer active')
+  }
+
   async beginValidation(importId: string, actorClerkUserId: string, now: string) {
     await transaction(this.pool, async (client) => {
       const current = await lockedImport(client, importId)
@@ -300,6 +314,10 @@ export class PostgresImportDraftStore implements ImportDraftStore {
         `SELECT id FROM library_imports
          WHERE expires_at <= $1
            AND status IN ('awaiting_upload', 'uploaded', 'validating', 'review_ready', 'invalid')
+           AND NOT EXISTS (
+             SELECT 1 FROM library_import_jobs
+             WHERE import_id = library_imports.id AND status = 'leased' AND lease_expires_at > $1
+           )
          ORDER BY id FOR UPDATE`,
         [now],
       )

@@ -1,4 +1,5 @@
 import { Readable } from 'node:stream'
+import { ZipFile } from 'yazl'
 import { describe, expect, it, vi } from 'vitest'
 import { LibraryImportEngine, LibraryImportInputError, retryDelayMilliseconds } from './library-import-engine.js'
 import type {
@@ -17,6 +18,8 @@ class FakeStore implements ImportDraftStore {
   lease: ImportJobLease | null = null
   completed: Parameters<ImportDraftStore['completeValidation']>[0] | null = null
   retry: unknown[] | null = null
+  failComplete = false
+  failRetry = false
 
   async createDraft(input: Parameters<ImportDraftStore['createDraft']>[0]) {
     this.draft = {
@@ -32,15 +35,22 @@ class FakeStore implements ImportDraftStore {
     if (this.draft) this.draft = { ...this.draft, status: 'uploaded', updatedAt: timestamp }
   }
   async claimValidationJob() { const lease = this.lease; this.lease = null; return lease }
+  async renewValidationLease() {
+    if (this.failComplete) throw new Error('validation lease was fenced')
+  }
   async beginValidation() { if (this.draft) this.draft = { ...this.draft, status: 'validating' } }
   async completeValidation(input: Parameters<ImportDraftStore['completeValidation']>[0]) {
+    if (this.failComplete) throw new Error('validation lease was fenced')
     this.completed = input
     if (this.draft) this.draft = {
       ...this.draft,
       status: input.results.some(({ severity }) => severity === 'error') ? 'invalid' : 'review_ready',
     }
   }
-  async retryValidation(...input: Parameters<ImportDraftStore['retryValidation']>) { this.retry = input }
+  async retryValidation(...input: Parameters<ImportDraftStore['retryValidation']>) {
+    if (this.failRetry) throw new Error('validation lease was fenced')
+    this.retry = input
+  }
   async queueValidation() {}
   async cancelDraft() { if (this.draft) this.draft = { ...this.draft, status: 'canceled' } }
   async expireDrafts() { return this.draft ? [this.draft.id] : [] }
@@ -51,6 +61,7 @@ class FakeStore implements ImportDraftStore {
 class FakeStorage implements ImportObjectStorage {
   metadata = { size: 100, contentType: 'application/zip' }
   deleted: string[] = []
+  source: Buffer<ArrayBufferLike> = Buffer.from('not a zip')
   async createUpload(objectKey: string, maximumBytes: number, expiresInSeconds: number) {
     return {
       url: 'https://uploads.example.test', fields: {}, objectKey, maximumBytes,
@@ -58,9 +69,23 @@ class FakeStorage implements ImportObjectStorage {
     }
   }
   async head() { return this.metadata }
-  async read() { return Readable.from(Buffer.from('not a zip')) }
+  async read() { return Readable.from(this.source) }
   async write() {}
   async deletePrefix(prefix: string) { this.deleted.push(prefix) }
+}
+
+function validZip() {
+  return new Promise<Buffer>((resolve, reject) => {
+    const archive = new ZipFile()
+    const chunks: Buffer[] = []
+    archive.outputStream.on('data', (chunk: Buffer) => chunks.push(chunk))
+    archive.outputStream.once('error', reject)
+    archive.outputStream.once('end', () => resolve(Buffer.concat(chunks)))
+    archive.addBuffer(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><path/></svg>'), 'symbol.svg', {
+      compress: false,
+    })
+    archive.end()
+  })
 }
 
 describe('LibraryImportEngine', () => {
@@ -117,6 +142,27 @@ describe('LibraryImportEngine', () => {
       '2026-08-13T10:00:00.000Z', '2026-08-13T10:00:20.000Z',
     ])
     expect(retryDelayMilliseconds(20)).toBe(60 * 60 * 1_000)
+  })
+
+  it('removes extracted objects when expiry fences an active validator', async () => {
+    const store = new FakeStore()
+    const storage = new FakeStorage()
+    storage.source = await validZip()
+    const engine = new LibraryImportEngine(store, storage, { now: () => now, id: () => id })
+    await engine.createDraft('user_admin', 'new_library', null)
+    await engine.completeUpload(id, 'user_admin')
+    store.lease = {
+      id: '22222222-2222-4222-8222-222222222222', importId: id, attempts: 1,
+      leaseOwner: 'worker-a', leaseExpiresAt: '2026-08-13T10:05:00.000Z', actorClerkUserId: 'user_admin',
+    }
+    store.failComplete = true
+    store.failRetry = true
+
+    await expect(engine.processNextValidation('worker-a')).rejects.toThrow(/fenced/)
+    expect(storage.deleted).toEqual([
+      `imports/${id}/extracted/`,
+      `imports/${id}/extracted/`,
+    ])
   })
 
   it('supports only the approved lifecycle transitions', () => {

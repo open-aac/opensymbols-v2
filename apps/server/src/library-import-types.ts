@@ -91,6 +91,7 @@ export interface ImportDraftStore {
   findDraft(importId: string): Promise<LibraryImportDraft | null>
   markUploaded(importId: string, actorClerkUserId: string, size: number, now: string): Promise<void>
   claimValidationJob(workerId: string, now: string, leaseExpiresAt: string): Promise<ImportJobLease | null>
+  renewValidationLease(jobId: string, workerId: string, now: string, leaseExpiresAt: string): Promise<void>
   beginValidation(importId: string, actorClerkUserId: string, now: string): Promise<void>
   completeValidation(input: {
     jobId: string

@@ -298,6 +298,7 @@ export interface ArchiveValidationOutput {
 export async function validateLibraryArchive(
   storage: ImportObjectStorage,
   draft: LibraryImportDraft,
+  beforeWrite: () => Promise<void> = async () => {},
 ): Promise<ArchiveValidationOutput> {
   const temporaryDirectory = await mkdtemp(join(tmpdir(), 'opensymbols-import-'))
   const archivePath = join(temporaryDirectory, 'source.zip')
@@ -375,6 +376,7 @@ export async function validateLibraryArchive(
             const digest = sha256(media.data)
             const extension = path === 'manifest-v1.json' ? '.json' : path.slice(path.lastIndexOf('.')).toLowerCase()
             const objectKey = `imports/${draft.id}/extracted/${sha256(path)}${extension}`
+            await beforeWrite()
             await storage.write(objectKey, media.data, media.mediaType)
             files.push({
               path,

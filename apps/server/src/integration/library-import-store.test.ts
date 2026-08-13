@@ -94,6 +94,25 @@ databaseIntegration('PostgresImportDraftStore integration', () => {
         'worker-three', '2026-08-13T10:07:00.000Z', '2026-08-13T10:12:00.000Z',
       )).toMatchObject({ importId, attempts: 1, actorClerkUserId: 'user_brian' })
 
+      const activeExpiringId = '22222222-2222-4222-8222-222222222222'
+      await store.createDraft({
+        id: activeExpiringId, kind: 'new_library', repositoryId: null,
+        uploadObjectKey: `imports/${activeExpiringId}/source.zip`, actorClerkUserId: 'user_owen',
+        now: '2026-08-13T09:59:00.000Z', expiresAt: '2026-08-13T10:01:00.000Z',
+      })
+      await store.markUploaded(activeExpiringId, 'user_owen', 100, '2026-08-13T09:59:00.000Z')
+      const activeLease = await store.claimValidationJob(
+        'active-worker', '2026-08-13T10:00:00.000Z', '2026-08-13T10:05:00.000Z',
+      )
+      expect(activeLease?.importId).toBe(activeExpiringId)
+      await store.beginValidation(activeExpiringId, 'user_owen', '2026-08-13T10:00:00.000Z')
+      expect(await store.expireDrafts('user_maintenance', '2026-08-13T10:02:00.000Z')).toEqual([])
+      await expect(store.renewValidationLease(
+        activeLease!.id, 'active-worker', '2026-08-13T10:02:00.000Z', '2026-08-13T10:07:00.000Z',
+      )).rejects.toBeInstanceOf(ImportStateConflictError)
+      expect(await store.expireDrafts('user_maintenance', '2026-08-13T10:06:00.000Z')).toEqual([activeExpiringId])
+      await store.markQuarantineDeleted(activeExpiringId, '2026-08-13T10:06:00.000Z')
+
       const expiringId = '33333333-3333-4333-8333-333333333333'
       await store.createDraft({
         id: expiringId, kind: 'new_library', repositoryId: null,
