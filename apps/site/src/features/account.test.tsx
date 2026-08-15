@@ -1,16 +1,18 @@
-import { http, HttpResponse } from 'msw'
+import { delay, http, HttpResponse } from 'msw'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { expectNoAccessibilityViolations } from '../test/axe'
 import { server } from '../test/server'
-import { AppAuthProvider, type AppAuthValue } from './authentication'
+import { AppAuthProvider, RequireAuthentication, type AppAuthValue } from './authentication'
 import {
   AccountAreaPage,
+  AdministratorPage,
   AccountLayout,
   AccountOverviewPage,
   AccountSettingsPage,
+  RequireAdministrator,
 } from './account'
 import { CharacterEditorPage, CharacterLibraryPage } from './character-builder'
 import { shirtColourOptions, skinColourOptions } from './character-template'
@@ -44,6 +46,12 @@ function renderAccount(path = '/account', auth = authValue()) {
             <Route path="packs" element={<AccountAreaPage area="packs" />} />
             <Route path="settings" element={<AccountSettingsPage />} />
           </Route>
+          <Route path="/admin" element={(
+            <RequireAuthentication>
+              <RequireAdministrator><AdministratorPage /></RequireAdministrator>
+            </RequireAuthentication>
+          )} />
+          <Route path="/sign-in" element={<p>Sign in destination</p>} />
           <Route path="/search" element={<p>Public search</p>} />
         </Routes>
       </AppAuthProvider>
@@ -65,6 +73,7 @@ describe('account dashboard', () => {
     expect(screen.getByRole('link', { name: 'My Symbols' })).toHaveAttribute('href', '/account/symbols')
     expect(screen.getByRole('link', { name: 'Symbol Packs' })).toHaveAttribute('href', '/account/packs')
     expect(screen.getByRole('link', { name: 'Explore symbols' })).toHaveAttribute('href', '/search')
+    expect(screen.queryByRole('link', { name: 'Administrator' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /create/i })).not.toBeInTheDocument()
 
     const accountNavigation = screen.getByRole('navigation', { name: 'Account navigation' })
@@ -83,6 +92,80 @@ describe('account dashboard', () => {
 
     await waitFor(() => expect(screen.queryByText(/Checking your secure server session/)).not.toBeInTheDocument())
     await expectNoAccessibilityViolations(view.container)
+  })
+
+  it('shows administrator navigation only after the server verifies the signed claim', async () => {
+    server.use(http.get('/api/app/session', () => HttpResponse.json({
+      user_id: 'user_demo',
+      administrator: true,
+    })))
+    const view = renderAccount()
+
+    const link = await screen.findByRole('link', { name: 'Administrator' })
+    expect(link).toHaveAttribute('href', '/admin')
+    await expectNoAccessibilityViolations(view.container)
+  })
+
+  it('protects the administrator page for ordinary users and exposes no pretend tools', async () => {
+    const view = renderAccount('/admin')
+
+    expect(await screen.findByRole('heading', { name: 'Administrator access required' })).toBeVisible()
+    expect(screen.queryByText('Library imports are coming next')).not.toBeInTheDocument()
+    await expectNoAccessibilityViolations(view.container)
+  })
+
+  it('renders the administrator foundation for a verified administrator', async () => {
+    server.use(http.get('/api/app/session', () => HttpResponse.json({
+      user_id: 'user_demo',
+      administrator: true,
+    })))
+    const view = renderAccount('/admin')
+
+    expect(await screen.findByRole('heading', { name: 'Administrator tools' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Library import review' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Open library imports' })).toHaveAttribute('href', '/admin/imports')
+    expect(screen.queryByRole('button', { name: /publish/i })).not.toBeInTheDocument()
+    await expectNoAccessibilityViolations(view.container)
+  })
+
+  it('announces server verification failures instead of granting administrator access', async () => {
+    server.use(http.get('/api/app/session', () => HttpResponse.json(
+      { error: 'authentication_unavailable' }, { status: 503 },
+    )))
+    const view = renderAccount('/admin')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Administrator access could not be verified')
+    expect(screen.queryByRole('heading', { name: 'Administrator tools' })).not.toBeInTheDocument()
+    await expectNoAccessibilityViolations(view.container)
+  })
+
+  it('uses the existing authentication boundary before checking administrator access', async () => {
+    renderAccount('/admin', authValue({ signedIn: false, userId: undefined, getToken: async () => null }))
+
+    expect(await screen.findByText('Sign in destination')).toBeVisible()
+    expect(screen.queryByText(/administrator access/i)).not.toBeInTheDocument()
+  })
+
+  it('waits for Clerk and reports an unconfigured Clerk environment before checking the claim', () => {
+    const loading = renderAccount('/admin', authValue({ loaded: false }))
+    expect(screen.getByRole('status')).toHaveTextContent('Checking your account')
+    loading.unmount()
+
+    renderAccount('/admin', authValue({ configured: false }))
+    expect(screen.getByRole('heading', { name: 'Account access is not configured' })).toBeVisible()
+    expect(screen.queryByText(/administrator access required/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps administrator content hidden while server verification is pending', async () => {
+    server.use(http.get('/api/app/session', async () => {
+      await delay(50)
+      return HttpResponse.json({ user_id: 'user_demo', administrator: false })
+    }))
+    renderAccount('/admin')
+
+    expect(screen.getByRole('status')).toHaveTextContent('Checking administrator access')
+    expect(screen.queryByRole('heading', { name: 'Administrator tools' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Administrator access required' })).toBeVisible()
   })
 
   it.each([

@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { app, createApp } from './app.js'
+import type { AppSessionVerifier } from './clerk-auth.js'
 import type { DiscoveryCatalog } from './discovery-catalog.js'
 import type { CharacterRecord, CharacterStore } from './character-store.js'
 
@@ -54,7 +55,7 @@ describe('Clerk-authenticated application API', () => {
     const appWithAuth = createApp({
       appSessionVerifier: {
         verify: async (request) => request.headers.get('authorization') === 'Bearer valid'
-          ? { userId: 'user_example' }
+          ? { userId: 'user_example', administrator: true }
           : null,
       },
     })
@@ -67,7 +68,7 @@ describe('Clerk-authenticated application API', () => {
     })
 
     expect(valid.status).toBe(200)
-    await expect(valid.json()).resolves.toEqual({ user_id: 'user_example' })
+    await expect(valid.json()).resolves.toEqual({ user_id: 'user_example', administrator: true })
     expect(invalid.status).toBe(401)
     await expect(invalid.json()).resolves.toEqual({ error: 'authentication_required' })
   })
@@ -75,11 +76,36 @@ describe('Clerk-authenticated application API', () => {
   it('does not proxy unknown application routes to Rails', async () => {
     const response = await createApp({
       legacyServerUrl: 'http://127.0.0.1:1',
-      appSessionVerifier: { verify: async () => ({ userId: 'user_example' }) },
+      appSessionVerifier: { verify: async () => ({ userId: 'user_example', administrator: false }) },
     }).request('/api/app/not-a-route')
 
     expect(response.status).toBe(404)
     await expect(response.json()).resolves.toEqual({ error: 'not_found' })
+  })
+
+  it('protects the administrator namespace with the centralized Clerk boundary', async () => {
+    const request = (session: AppSessionVerifier['verify']) => createApp({
+      appSessionVerifier: { verify: session },
+    }).request('/api/app/admin/future-route', {
+      headers: { Authorization: 'Bearer session-token' },
+    })
+
+    const unconfigured = await app.request('/api/app/admin/future-route')
+    const invalid = await request(async () => null)
+    const ordinary = await request(async () => ({ userId: 'user_example', administrator: false }))
+    const administrator = await request(async () => ({ userId: 'admin_example', administrator: true }))
+    const unavailable = await request(async () => { throw new Error('verification unavailable') })
+
+    expect(unconfigured.status).toBe(503)
+    await expect(unconfigured.json()).resolves.toEqual({ error: 'authentication_unconfigured' })
+    expect(invalid.status).toBe(401)
+    await expect(invalid.json()).resolves.toEqual({ error: 'authentication_required' })
+    expect(ordinary.status).toBe(403)
+    await expect(ordinary.json()).resolves.toEqual({ error: 'administrator_required' })
+    expect(administrator.status).toBe(404)
+    await expect(administrator.json()).resolves.toEqual({ error: 'not_found' })
+    expect(unavailable.status).toBe(503)
+    await expect(unavailable.json()).resolves.toEqual({ error: 'authentication_unavailable' })
   })
 })
 
@@ -119,7 +145,7 @@ describe('Clerk-owned character API', () => {
       characterStore: store,
       appSessionVerifier: {
         verify: async (request) => request.headers.get('authorization') === 'Bearer valid'
-          ? { userId: 'user_example' }
+          ? { userId: 'user_example', administrator: false }
           : null,
       },
       characterId: () => id,
@@ -179,6 +205,30 @@ describe('Clerk-owned character API', () => {
 
     const deleted = setup({ listCharacters: vi.fn<CharacterStore['listCharacters']>(async () => ({ kind: 'account_deleted' })) }).characterApp
     expect((await deleted.request('/api/app/characters', { headers: { Authorization: 'Bearer valid' } })).status).toBe(403)
+  })
+
+  it('returns a controlled 503 from every character route when verification is unavailable', async () => {
+    const { store } = setup()
+    const unavailable = createApp({
+      characterStore: store,
+      appSessionVerifier: { verify: async () => { throw new Error('verification unavailable') } },
+    })
+    const requests: Array<[string, RequestInit]> = [
+      ['/api/app/characters', { method: 'GET' }],
+      ['/api/app/characters', { method: 'POST' }],
+      [`/api/app/characters/${id}`, { method: 'GET' }],
+      [`/api/app/characters/${id}`, { method: 'PATCH' }],
+      [`/api/app/characters/${id}`, { method: 'DELETE' }],
+    ]
+
+    for (const [path, init] of requests) {
+      const response = await unavailable.request(path, {
+        ...init,
+        headers: { Authorization: 'Bearer session-token' },
+      })
+      expect(response.status).toBe(503)
+      await expect(response.json()).resolves.toEqual({ error: 'authentication_unavailable' })
+    }
   })
 
   it('reads, updates, and deletes only through the scoped store', async () => {

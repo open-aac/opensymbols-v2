@@ -66,7 +66,6 @@ async function postgresExport() {
   const output = resolve(repositoryRoot, option('output', join(defaultSearchData, `postgres-${snapshotId}`))!)
   const result = await exportPostgresSearchData({
     connectionString: requiredEnvironment('DATABASE_URL'),
-    encryptionKey: requiredEnvironment('SECURE_ENCRYPTION_KEY'),
     s3Bucket: requiredEnvironment('S3_BUCKET'),
     s3Cdn: requiredEnvironment('S3_CDN'),
     snapshotId,

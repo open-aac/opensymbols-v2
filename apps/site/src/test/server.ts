@@ -7,7 +7,7 @@ export const handlers = [
     if (request.headers.get('Authorization') !== 'Bearer clerk-session-token') {
       return HttpResponse.json({ error: 'authentication_required' }, { status: 401 })
     }
-    return HttpResponse.json({ user_id: 'user_demo' })
+    return HttpResponse.json({ user_id: 'user_demo', administrator: false })
   }),
   http.get('/api/app/characters', () => HttpResponse.json({ characters: [] })),
   http.post('/api/v2/token', () => HttpResponse.json({

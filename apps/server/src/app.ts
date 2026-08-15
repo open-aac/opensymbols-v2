@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { Hono } from 'hono'
+import { Readable } from 'node:stream'
+import { Hono, type Context } from 'hono'
 import { serveStatic } from '@hono/node-server/serve-static'
 import {
   findPublicRepository,
@@ -22,7 +23,7 @@ import {
   verifyAccessToken,
   type PublicApiNonce,
 } from './public-api-auth.js'
-import type { AppSessionVerifier } from './clerk-auth.js'
+import type { AppSession, AppSessionVerifier } from './clerk-auth.js'
 import type { ClerkWebhookVerifier } from './clerk-webhook.js'
 import type { CharacterStore } from './character-store.js'
 import {
@@ -33,6 +34,13 @@ import {
 } from './character-api.js'
 import type { DiscoveryCatalog } from './discovery-catalog.js'
 import { PostgresDiscoveryCatalog } from './discovery-catalog.js'
+import type { ImportDraftStore, ImportObjectStorage } from './library-import-types.js'
+import {
+  LibraryImportEngine,
+  LibraryImportInputError,
+  LibraryImportNotFoundError,
+} from './library-import-engine.js'
+import { ImportStateConflictError } from './library-import-store.js'
 
 export interface AppOptions {
   legacyServerUrl?: string
@@ -42,7 +50,8 @@ export interface AppOptions {
   discoveryCatalog?: DiscoveryCatalog
   symbolRequestStore?: PublicDiscoveryStore
   publicApiStore?: PublicApiStore
-  publicApiEncryptionKey?: string
+  publicApiTokenSigningKey?: string
+  publicApiLegacyTokenVerificationKey?: string
   publicApiNow?: () => Date
   publicApiNonce?: PublicApiNonce
   s3Bucket?: string
@@ -53,10 +62,13 @@ export interface AppOptions {
   characterStore?: CharacterStore
   appNow?: () => Date
   characterId?: () => string
+  importDraftStore?: ImportDraftStore
+  libraryImportEngine?: LibraryImportEngine
+  importObjectStorage?: ImportObjectStorage
 }
 
 export function createApp(options: AppOptions = {}) {
-  const app = new Hono()
+  const app = new Hono<{ Variables: { appSession: AppSession } }>()
   const imageOptions: PublicReadImageOptions = {
     s3Bucket: options.s3Bucket,
     s3Cdn: options.s3Cdn,
@@ -71,7 +83,18 @@ export function createApp(options: AppOptions = {}) {
   const privateResponse = (context: { header(name: string, value: string): void }) => {
     context.header('Cache-Control', 'private, no-store')
   }
-  const appSession = async (request: Request) => options.appSessionVerifier?.verify(request)
+  const appSession = async (request: Request): Promise<
+    | { kind: 'authenticated'; session: AppSession }
+    | { kind: 'required' }
+    | { kind: 'unavailable' }
+  > => {
+    try {
+      const session = await options.appSessionVerifier?.verify(request)
+      return session ? { kind: 'authenticated', session } : { kind: 'required' }
+    } catch {
+      return { kind: 'unavailable' }
+    }
+  }
 
   app.get('/api/health', async (context) => {
     try {
@@ -87,19 +110,25 @@ export function createApp(options: AppOptions = {}) {
       return context.json({ error: 'authentication_unconfigured' as const }, 503)
     }
 
-    const session = await options.appSessionVerifier.verify(context.req.raw)
-    if (!session) {
+    const authentication = await appSession(context.req.raw)
+    if (authentication.kind === 'unavailable') {
+      return context.json({ error: 'authentication_unavailable' as const }, 503)
+    }
+    if (authentication.kind === 'required') {
       return context.json({ error: 'authentication_required' as const }, 401)
     }
 
-    return context.json({ user_id: session.userId })
+    const { session } = authentication
+    return context.json({ user_id: session.userId, administrator: session.administrator })
   })
 
   app.get('/api/app/characters', async (context) => {
     privateResponse(context)
     if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
-    const session = await appSession(context.req.raw)
-    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    const authentication = await appSession(context.req.raw)
+    if (authentication.kind === 'unavailable') return context.json({ error: 'authentication_unavailable' as const }, 503)
+    if (authentication.kind === 'required') return context.json({ error: 'authentication_required' as const }, 401)
+    const { session } = authentication
     if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
     try {
       const result = await options.characterStore.listCharacters(session.userId, appNow().toISOString())
@@ -113,8 +142,10 @@ export function createApp(options: AppOptions = {}) {
   app.post('/api/app/characters', async (context) => {
     privateResponse(context)
     if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
-    const session = await appSession(context.req.raw)
-    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    const authentication = await appSession(context.req.raw)
+    if (authentication.kind === 'unavailable') return context.json({ error: 'authentication_unavailable' as const }, 503)
+    if (authentication.kind === 'required') return context.json({ error: 'authentication_required' as const }, 401)
+    const { session } = authentication
     if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
     let input: unknown
     try { input = await context.req.json() } catch { return context.json({ error: 'invalid_character' as const }, 422) }
@@ -139,8 +170,10 @@ export function createApp(options: AppOptions = {}) {
   app.get('/api/app/characters/:id', async (context) => {
     privateResponse(context)
     if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
-    const session = await appSession(context.req.raw)
-    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    const authentication = await appSession(context.req.raw)
+    if (authentication.kind === 'unavailable') return context.json({ error: 'authentication_unavailable' as const }, 503)
+    if (authentication.kind === 'required') return context.json({ error: 'authentication_required' as const }, 401)
+    const { session } = authentication
     if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
     const id = context.req.param('id')
     if (!isCharacterId(id)) return context.json({ error: 'not_found' as const }, 404)
@@ -157,8 +190,10 @@ export function createApp(options: AppOptions = {}) {
   app.patch('/api/app/characters/:id', async (context) => {
     privateResponse(context)
     if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
-    const session = await appSession(context.req.raw)
-    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    const authentication = await appSession(context.req.raw)
+    if (authentication.kind === 'unavailable') return context.json({ error: 'authentication_unavailable' as const }, 503)
+    if (authentication.kind === 'required') return context.json({ error: 'authentication_required' as const }, 401)
+    const { session } = authentication
     if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
     const id = context.req.param('id')
     if (!isCharacterId(id)) return context.json({ error: 'not_found' as const }, 404)
@@ -187,8 +222,10 @@ export function createApp(options: AppOptions = {}) {
   app.delete('/api/app/characters/:id', async (context) => {
     privateResponse(context)
     if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
-    const session = await appSession(context.req.raw)
-    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    const authentication = await appSession(context.req.raw)
+    if (authentication.kind === 'unavailable') return context.json({ error: 'authentication_unavailable' as const }, 503)
+    if (authentication.kind === 'required') return context.json({ error: 'authentication_required' as const }, 401)
+    const { session } = authentication
     if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
     const id = context.req.param('id')
     if (!isCharacterId(id)) return context.json({ error: 'not_found' as const }, 404)
@@ -199,6 +236,199 @@ export function createApp(options: AppOptions = {}) {
       return context.body(null, 204)
     } catch {
       return context.json({ error: 'database_unavailable' as const }, 503)
+    }
+  })
+
+  app.use('/api/app/admin/*', async (context, next) => {
+    privateResponse(context)
+    if (!options.appSessionVerifier) {
+      return context.json({ error: 'authentication_unconfigured' as const }, 503)
+    }
+
+    const authentication = await appSession(context.req.raw)
+    if (authentication.kind === 'unavailable') {
+      return context.json({ error: 'authentication_unavailable' as const }, 503)
+    }
+    if (authentication.kind === 'required') return context.json({ error: 'authentication_required' as const }, 401)
+    const { session } = authentication
+    if (session.administrator !== true) {
+      return context.json({ error: 'administrator_required' as const }, 403)
+    }
+
+    context.set('appSession', session)
+    await next()
+  })
+
+  const importFailure = (context: Context, error: unknown) => {
+    if (error instanceof LibraryImportNotFoundError) return context.json({ error: 'not_found' as const }, 404)
+    if (error instanceof ImportStateConflictError) return context.json({ error: 'import_state_conflict' as const }, 409)
+    if (error instanceof LibraryImportInputError) return context.json({ error: 'invalid_import' as const }, 422)
+    return context.json({ error: 'import_service_unavailable' as const }, 503)
+  }
+  const importDraftResponse = <Draft extends { uploadObjectKey: string }>(draft: Draft) => {
+    const { uploadObjectKey: _privateObjectKey, ...response } = draft
+    void _privateObjectKey
+    return response
+  }
+  const importUploadResponse = <Upload extends { objectKey: string }>(upload: Upload) => {
+    const { objectKey: _privateObjectKey, ...response } = upload
+    void _privateObjectKey
+    return response
+  }
+
+  app.get('/api/app/admin/imports', async (context) => {
+    if (!options.importDraftStore) return context.json({ error: 'import_service_unavailable' as const }, 503)
+    try {
+      const imports = await options.importDraftStore.listDrafts()
+      return context.json({ imports: imports.map(importDraftResponse) })
+    } catch (error) {
+      return importFailure(context, error)
+    }
+  })
+
+  app.get('/api/app/admin/imports/repositories', async (context) => {
+    if (!options.importDraftStore) return context.json({ error: 'import_service_unavailable' as const }, 503)
+    try {
+      return context.json({ repositories: await options.importDraftStore.listPublicRepositories() })
+    } catch (error) {
+      return importFailure(context, error)
+    }
+  })
+
+  app.post('/api/app/admin/imports', async (context) => {
+    if (!options.libraryImportEngine) return context.json({ error: 'import_service_unavailable' as const }, 503)
+    let body: unknown
+    try { body = await context.req.json() } catch { return context.json({ error: 'invalid_import' as const }, 422) }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return context.json({ error: 'invalid_import' as const }, 422)
+    }
+    const input = body as Record<string, unknown>
+    const kind = input.kind
+    const repositoryId = input.repository_id
+    if (kind !== 'new_library' && kind !== 'existing_library') {
+      return context.json({ error: 'invalid_import' as const }, 422)
+    }
+    if (kind === 'new_library' && repositoryId !== null && repositoryId !== undefined) {
+      return context.json({ error: 'invalid_import' as const }, 422)
+    }
+    if (kind === 'existing_library' && (!Number.isSafeInteger(repositoryId) || Number(repositoryId) < 1)) {
+      return context.json({ error: 'invalid_import' as const }, 422)
+    }
+    if (kind === 'existing_library') {
+      if (!options.importDraftStore) return context.json({ error: 'import_service_unavailable' as const }, 503)
+      try {
+        if (!await options.importDraftStore.publicRepositoryExists(Number(repositoryId))) {
+          return context.json({ error: 'not_found' as const }, 404)
+        }
+      } catch { return context.json({ error: 'import_service_unavailable' as const }, 503) }
+    }
+    const metadataValues = ['repository_key', 'repository_name', 'default_license', 'license_url', 'attribution_name'] as const
+    if (kind === 'new_library' && metadataValues.some((key) => typeof input[key] !== 'string' || !input[key].trim())) {
+      return context.json({ error: 'invalid_import' as const }, 422)
+    }
+    if (kind === 'new_library') {
+      try {
+        if (new URL(String(input.license_url)).protocol !== 'https:') throw new Error('not https')
+      } catch {
+        return context.json({ error: 'invalid_import' as const }, 422)
+      }
+    }
+    try {
+      const created = await options.libraryImportEngine.createDraft(
+        context.get('appSession').userId,
+        kind,
+        kind === 'existing_library' ? Number(repositoryId) : null,
+        kind === 'new_library' ? {
+          repositoryKey: String(input.repository_key).trim(),
+          repositoryName: String(input.repository_name).trim(),
+          defaultLicense: String(input.default_license).trim(),
+          licenseUrl: String(input.license_url).trim(),
+          attributionName: String(input.attribution_name).trim(),
+        } : undefined,
+      )
+      context.header('Location', `/api/app/admin/imports/${created.draft.id}`)
+      return context.json({
+        draft: importDraftResponse(created.draft),
+        upload: importUploadResponse(created.upload),
+      }, 201)
+    } catch (error) {
+      return importFailure(context, error)
+    }
+  })
+
+  app.get('/api/app/admin/imports/:id', async (context) => {
+    if (!options.importDraftStore) return context.json({ error: 'import_service_unavailable' as const }, 503)
+    try {
+      const draft = await options.importDraftStore.findDraftDetail(context.req.param('id'))
+      return draft ? context.json({ import: importDraftResponse(draft) }) : context.json({ error: 'not_found' as const }, 404)
+    } catch (error) {
+      return importFailure(context, error)
+    }
+  })
+
+  app.post('/api/app/admin/imports/:id/upload', async (context) => {
+    if (!options.libraryImportEngine) return context.json({ error: 'import_service_unavailable' as const }, 503)
+    try {
+      return context.json({ upload: importUploadResponse(
+        await options.libraryImportEngine.createUpload(context.req.param('id')),
+      ) })
+    } catch (error) {
+      return importFailure(context, error)
+    }
+  })
+
+  app.put('/api/app/admin/imports/:id/content', async (context) => {
+    if (!options.importDraftStore || !options.importObjectStorage?.acceptUpload) {
+      return context.json({ error: 'not_found' as const }, 404)
+    }
+    try {
+      const draft = await options.importDraftStore.findDraft(context.req.param('id'))
+      if (!draft) return context.json({ error: 'not_found' as const }, 404)
+      if (draft.status !== 'awaiting_upload') return context.json({ error: 'import_state_conflict' as const }, 409)
+      if (context.req.header('content-type') !== 'application/zip') {
+        return context.json({ error: 'invalid_import' as const }, 422)
+      }
+      const stream = context.req.raw.body
+      if (!stream) return context.json({ error: 'invalid_import' as const }, 422)
+      await options.importObjectStorage.acceptUpload(
+        draft.uploadObjectKey,
+        Readable.fromWeb(stream as ReadableStream<Uint8Array>),
+        200 * 1024 * 1024,
+      )
+      return context.body(null, 204)
+    } catch (error) {
+      return importFailure(context, error)
+    }
+  })
+
+  app.post('/api/app/admin/imports/:id/complete-upload', async (context) => {
+    if (!options.libraryImportEngine) return context.json({ error: 'import_service_unavailable' as const }, 503)
+    try {
+      await options.libraryImportEngine.completeUpload(context.req.param('id'), context.get('appSession').userId)
+      return context.json({ queued: true as const }, 202)
+    } catch (error) {
+      return importFailure(context, error)
+    }
+  })
+
+  app.post('/api/app/admin/imports/:id/retry', async (context) => {
+    if (!options.libraryImportEngine) return context.json({ error: 'import_service_unavailable' as const }, 503)
+    try {
+      await options.libraryImportEngine.retryDraftValidation(context.req.param('id'), context.get('appSession').userId)
+      return context.json({ queued: true as const }, 202)
+    } catch (error) {
+      return importFailure(context, error)
+    }
+  })
+
+  app.post('/api/app/admin/imports/:id/cancel', async (context) => {
+    if (!options.libraryImportEngine) return context.json({ error: 'import_service_unavailable' as const }, 503)
+    try {
+      return context.json(await options.libraryImportEngine.cancelDraft(
+        context.req.param('id'), context.get('appSession').userId,
+      ))
+    } catch (error) {
+      return importFailure(context, error)
     }
   })
 
@@ -346,7 +576,9 @@ export function createApp(options: AppOptions = {}) {
     const store = options.publicApiStore
     const now = options.publicApiNow ?? (() => new Date())
     const nonce = options.publicApiNonce ?? securePublicApiNonce
-    const encryptionKey = options.publicApiEncryptionKey ?? process.env.SECURE_ENCRYPTION_KEY
+    const signingKey = options.publicApiTokenSigningKey ?? process.env.PUBLIC_API_TOKEN_SIGNING_KEY
+    const legacyVerificationKey = options.publicApiLegacyTokenVerificationKey
+      ?? process.env.PUBLIC_API_LEGACY_TOKEN_VERIFICATION_KEY
     const formBody = async (context: { req: { parseBody(): Promise<Record<string, unknown>> } }) => {
       try {
         return await context.req.parseBody()
@@ -373,10 +605,10 @@ export function createApp(options: AppOptions = {}) {
       const body = await formBody(context)
       const sharedSecret = typeof body?.secret === 'string' ? body.secret.trim() : ''
       if (!sharedSecret) return context.json({ error: 'secret required' }, 400)
-      if (!encryptionKey) return context.json({ error: 'authentication_unconfigured' as const }, 503)
+      if (!signingKey) return context.json({ error: 'authentication_unconfigured' as const }, 503)
       if (sharedSecret.startsWith('temp')) return context.json({ error: 'invalid token' }, 400)
       try {
-        const result = await exchangeSharedSecret(store, sharedSecret, now(), nonce, encryptionKey)
+        const result = await exchangeSharedSecret(store, sharedSecret, now(), nonce, signingKey)
         if (!result) return context.json({ error: 'invalid token' }, 400)
         return context.json(result)
       } catch {
@@ -385,11 +617,13 @@ export function createApp(options: AppOptions = {}) {
     })
 
     app.get('/api/v2/symbols', async (context) => {
-      if (!encryptionKey) return context.json({ error: 'authentication_unconfigured' as const }, 503)
+      if (!signingKey) return context.json({ error: 'authentication_unconfigured' as const }, 503)
       const token = context.req.header('authorization') ?? context.req.query('access_token')
       if (!token) return context.json({ error: 'invalid token' }, 400)
       try {
-        const verification = await verifyAccessToken(store, token, now(), encryptionKey)
+        const verification = await verifyAccessToken(
+          store, token, now(), signingKey, legacyVerificationKey,
+        )
         if (verification.kind === 'expired') {
           return context.json({ error: 'token expired', token_expired: true }, 401)
         }

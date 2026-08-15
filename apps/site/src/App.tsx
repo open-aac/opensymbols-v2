@@ -35,10 +35,17 @@ import {
 } from './features/authentication'
 import {
   AccountAreaPage,
+  AdministratorPage,
   AccountLayout,
   AccountOverviewPage,
   AccountSettingsPage,
+  RequireAdministrator,
 } from './features/account'
+import {
+  AdministratorImportDetailPage,
+  AdministratorImportsPage,
+  NewAdministratorImportPage,
+} from './features/administrator-imports'
 import { CharacterEditorPage, CharacterLibraryPage } from './features/character-builder'
 import { useAsync } from './hooks'
 import type { SymbolResult } from './types'
@@ -478,6 +485,17 @@ export function App() {
           <Route path="packs" element={<AccountAreaPage area="packs" />} />
           <Route path="settings" element={<AccountSettingsPage />} />
         </Route>
+        <Route
+          path="/admin"
+          element={(
+            <RequireAuthentication>
+              <RequireAdministrator><AdministratorPage /></RequireAdministrator>
+            </RequireAuthentication>
+          )}
+        />
+        <Route path="/admin/imports" element={<RequireAuthentication><RequireAdministrator><AdministratorImportsPage /></RequireAdministrator></RequireAuthentication>} />
+        <Route path="/admin/imports/new" element={<RequireAuthentication><RequireAdministrator><NewAdministratorImportPage /></RequireAdministrator></RequireAuthentication>} />
+        <Route path="/admin/imports/:id" element={<RequireAuthentication><RequireAdministrator><AdministratorImportDetailPage /></RequireAdministrator></RequireAuthentication>} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </SiteLayout>

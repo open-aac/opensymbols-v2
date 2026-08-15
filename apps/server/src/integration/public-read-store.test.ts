@@ -1,7 +1,7 @@
 import { Pool } from 'pg'
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../app.js'
-import { decodeGoSecure } from '../go-secure.js'
+import { catalogSchemaSql } from '../catalog-schema.js'
 import { createPostgresPublicReadStore } from '../public-read-store.js'
 
 const databaseIntegration = process.env.RUN_DATABASE_INTEGRATION === '1' ? describe : describe.skip
@@ -27,39 +27,8 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
       databaseUrl.pathname = `/${databaseName}`
       const connectionString = databaseUrl.toString()
       setup = new Pool({ connectionString })
+      await setup.query(catalogSchemaSql)
       await setup.query(`
-        CREATE TABLE symbol_repositories (
-          id serial PRIMARY KEY,
-          repo_key varchar NOT NULL UNIQUE,
-          settings text
-        );
-        CREATE TABLE external_sources (
-          id serial PRIMARY KEY,
-          settings text,
-          token varchar NOT NULL UNIQUE,
-          created_at timestamp NOT NULL,
-          updated_at timestamp NOT NULL
-        );
-        CREATE TABLE picture_symbols (
-          id serial PRIMARY KEY,
-          repo_key varchar NOT NULL,
-          symbol_key varchar NOT NULL,
-          settings text,
-          enabled boolean,
-          has_skin boolean,
-          unsafe_result boolean,
-          UNIQUE (repo_key, symbol_key)
-        );
-        CREATE TABLE symbol_requests (
-          id serial PRIMARY KEY,
-          settings text,
-          phrase varchar,
-          locale varchar,
-          created_at timestamp NOT NULL,
-          updated_at timestamp NOT NULL
-        );
-        CREATE INDEX index_symbol_requests_on_locale_and_phrase
-          ON symbol_requests (locale, phrase);
         CREATE TABLE app_users (
           clerk_user_id varchar PRIMARY KEY,
           created_at timestamp NOT NULL,
@@ -80,50 +49,67 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
         CREATE INDEX index_characters_on_owner_and_updated_at
           ON characters (clerk_user_id, updated_at, id);
       `)
-      await setup.query(
-        'INSERT INTO symbol_repositories (repo_key, settings) VALUES ($1, $2)',
-        ['demo', '**{"name":"Database demo","active":true}'],
-      )
-      await setup.query(
-        'INSERT INTO symbol_repositories (repo_key, settings) VALUES ($1, $2)',
-        ['private', '**{"name":"Private","active":true,"protected":true}'],
-      )
       await setup.query(`
-        INSERT INTO picture_symbols
-          (repo_key, symbol_key, settings, enabled, has_skin, unsafe_result)
+        INSERT INTO catalog_migration_runs
+          (id, snapshot_id, status, source_postgresql_version, source_fingerprint,
+           source_counts, normalized_counts, started_at, completed_at)
+        VALUES
+          ('10000000-0000-4000-8000-000000000099', 'store-fixture', 'completed', '17',
+           repeat('a', 64), '{}'::jsonb, '{}'::jsonb, now(), now());
+        INSERT INTO catalog_repositories
+          (id, migration_run_id, repo_key, name, active, protected, created_at, updated_at)
+        VALUES
+          (1, '10000000-0000-4000-8000-000000000099', 'demo', 'Database demo', true, false, now(), now()),
+          (2, '10000000-0000-4000-8000-000000000099', 'private', 'Private', true, true, now(), now());
+      `)
+      await setup.query(`
+        INSERT INTO catalog_symbols
+          (id, migration_run_id, repository_id, symbol_key, name, row_enabled,
+           settings_enabled, row_has_skin, settings_has_skin, row_unsafe,
+           settings_unsafe, created_at, updated_at)
         SELECT
-          'demo',
+          value,
+          '10000000-0000-4000-8000-000000000099',
+          1,
           'page-' || value,
-          '**{"name":"Page ' || value || '","enabled":true,"locales":{"en":{"search_string":"page symbol"}}}',
+          'Page ' || value,
+          true,
           true,
           value = 2,
-          value = 3
+          value = 2,
+          value = 3,
+          value = 3,
+          now(), now()
         FROM generate_series(1, 61) AS value
       `)
-      await setup.query(
-        `INSERT INTO picture_symbols
-          (repo_key, symbol_key, settings, enabled, has_skin, unsafe_result)
-         VALUES ('private', 'secret', '**{"name":"Secret page","enabled":true}', true, false, false)`,
-      )
-      await setup.query(
-        `INSERT INTO picture_symbols
-          (id, repo_key, symbol_key, settings, enabled, has_skin, unsafe_result)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [100, 'demo', 'hello', '**{"name":"Hello","enabled":true}', true, false, false],
-      )
+      await setup.query(`
+        INSERT INTO catalog_symbol_localizations
+          (migration_run_id, symbol_id, locale, name, search_string, ordinal)
+        SELECT '10000000-0000-4000-8000-000000000099', value, 'en',
+               'Page ' || value, 'page symbol', 0
+        FROM generate_series(1, 61) AS value;
+        INSERT INTO catalog_symbols
+          (id, migration_run_id, repository_id, symbol_key, name, row_enabled,
+           settings_enabled, row_has_skin, settings_has_skin, row_unsafe,
+           settings_unsafe, created_at, updated_at)
+        VALUES
+          (62, '10000000-0000-4000-8000-000000000099', 2, 'secret', 'Secret page',
+           true, true, false, false, false, false, now(), now()),
+          (100, '10000000-0000-4000-8000-000000000099', 1, 'hello', 'Hello',
+           true, true, false, false, false, false, now(), now());
+      `)
 
       store = createPostgresPublicReadStore({
         connectionString,
-        encryptionKey: 'test-secure-encryption-key',
       })
-      await expect(store.listRepositories()).resolves.toEqual([
-        { repoKey: 'demo', settings: { name: 'Database demo', active: true } },
+      await expect(store.listRepositories()).resolves.toMatchObject([
+        { repoKey: 'demo', settings: { name: 'Database demo', active: true, protected: false } },
         { repoKey: 'private', settings: { name: 'Private', active: true, protected: true } },
       ])
-      await expect(store.findRepository('demo')).resolves.toEqual(
+      await expect(store.findRepository('demo')).resolves.toMatchObject(
         { repoKey: 'demo', settings: { name: 'Database demo', active: true } },
       )
-      await expect(store.findSymbol('demo', 'hello')).resolves.toEqual({
+      await expect(store.findSymbol('demo', 'hello')).resolves.toMatchObject({
         id: 100,
         repoKey: 'demo',
         symbolKey: 'hello',
@@ -137,7 +123,7 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
         publicReadStore: store,
         publicDiscoveryStore: store,
         publicApiStore: store,
-        publicApiEncryptionKey: 'test-secure-encryption-key',
+        publicApiTokenSigningKey: 'dedicated-public-api-signing-key',
         publicApiNow: () => new Date('2026-07-22T10:00:00.000Z'),
         publicApiNonce: (label) => label === 'external_source_token'
           ? 'integration-shared-secret'
@@ -160,14 +146,15 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
         store.addSymbolRequest('Bacon', 'First concurrent comment', '2026-07-22T10:00:00.000Z'),
         store.addSymbolRequest('Bacon', 'Second concurrent comment', '2026-07-22T10:00:01.000Z'),
       ])
-      const requestRows = await setup?.query<{ settings: string }>(
-        "SELECT settings FROM symbol_requests WHERE phrase = 'Bacon' AND locale = 'en'",
+      const requestRows = await setup?.query<{ vote_count: number; comments: number }>(
+        `SELECT request.vote_count, count(comment.*)::int AS comments
+         FROM catalog_symbol_requests request
+         LEFT JOIN catalog_symbol_request_comments comment ON comment.request_id = request.id
+         WHERE request.phrase = 'Bacon' AND request.locale = 'en'
+         GROUP BY request.id`,
       )
       expect(requestRows?.rows).toHaveLength(1)
-      expect(decodeGoSecure(
-        requestRows!.rows[0]!.settings,
-        'test-secure-encryption-key',
-      )).toMatchObject({ n_votes: 2 })
+      expect(requestRows!.rows[0]).toEqual({ vote_count: 2, comments: 2 })
 
       const application = await app.request('/api/v2/generate_secret', {
         method: 'POST',
@@ -180,10 +167,13 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
       })
       expect(application.status).toBe(200)
       await expect(application.json()).resolves.toEqual({ shared_secret: 'integration-shared-secret' })
-      const sourceRows = await setup.query<{ settings: string }>(
-        "SELECT settings FROM external_sources WHERE token = 'integration-shared-secret'",
+      const sourceRows = await setup.query<{
+        name: string; email: string; purpose: string; approved: boolean
+      }>(
+        `SELECT name, email, purpose, approved FROM catalog_api_clients
+         WHERE shared_secret = 'integration-shared-secret'`,
       )
-      expect(decodeGoSecure(sourceRows.rows[0]!.settings, 'test-secure-encryption-key')).toEqual({
+      expect(sourceRows.rows[0]).toEqual({
         name: 'Integration AAC',
         email: 'integration@example.com',
         purpose: 'Database API verification',
