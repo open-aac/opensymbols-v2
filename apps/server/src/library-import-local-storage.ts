@@ -1,5 +1,5 @@
-import { createReadStream, createWriteStream } from 'node:fs'
-import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { createReadStream } from 'node:fs'
+import { mkdir, open, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { Transform, type Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
@@ -32,6 +32,10 @@ export class LocalImportObjectStorage implements ImportObjectStorage {
   async acceptUpload(objectKey: string, body: Readable, maximumBytes: number) {
     const path = this.pathFor(objectKey)
     await mkdir(dirname(path), { recursive: true })
+    // Reserve the destination before consuming the request body. A concurrent
+    // upload that loses this exclusive create must not remove the file owned
+    // by the winning request while handling its EEXIST failure.
+    const handle = await open(path, 'wx')
     let bytes = 0
     const limiter = new Transform({
       transform(chunk: Buffer, _encoding, callback) {
@@ -40,10 +44,12 @@ export class LocalImportObjectStorage implements ImportObjectStorage {
       },
     })
     try {
-      await pipeline(body, limiter, createWriteStream(path, { flags: 'wx' }))
+      await pipeline(body, limiter, handle.createWriteStream())
     } catch (error) {
       await rm(path, { force: true })
       throw error
+    } finally {
+      await handle.close().catch(() => undefined)
     }
   }
 

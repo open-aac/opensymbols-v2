@@ -103,6 +103,16 @@ describe('LibraryImportEngine', () => {
     expect(created.upload.maximumBytes).toBe(200 * 1024 * 1024)
   })
 
+  it('does not persist a draft when upload authorization fails', async () => {
+    const store = new FakeStore()
+    const storage = new FakeStorage()
+    vi.spyOn(storage, 'createUpload').mockRejectedValueOnce(new Error('object storage unavailable'))
+    const engine = new LibraryImportEngine(store, storage, { now: () => now, id: () => id })
+
+    await expect(engine.createDraft('user_admin', 'new_library', null)).rejects.toThrow(/unavailable/)
+    expect(store.draft).toBeNull()
+  })
+
   it('rejects mismatched repository identity and invalid uploaded objects', async () => {
     const store = new FakeStore()
     const storage = new FakeStorage()

@@ -11,6 +11,7 @@ import { LibraryImportEngine } from './library-import-engine.js'
 import { LocalImportObjectStorage } from './library-import-local-storage.js'
 import { importObjectStorageFromEnvironment } from './library-import-storage.js'
 import { createPostgresImportDraftStore } from './library-import-store.js'
+import { createImportValidationWorker } from './library-import-worker.js'
 
 const port = Number.parseInt(process.env.PORT ?? '3000', 10)
 const siteRoot = process.env.SITE_DIST_PATH ?? fileURLToPath(new URL('../../site/dist', import.meta.url))
@@ -55,15 +56,11 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(`OpenSymbols server listening on http://localhost:${info.port}`)
 })
 
-let importWorkerRunning = false
-const importWorker = setInterval(() => {
-  if (importWorkerRunning) return
-  importWorkerRunning = true
-  libraryImportEngine.processNextValidation(`server:${process.pid}`)
-    .catch((error) => console.error('Library import validation failed', error))
-    .finally(() => { importWorkerRunning = false })
-}, 1_000)
-importWorker.unref()
+const importWorker = createImportValidationWorker(
+  () => libraryImportEngine.processNextValidation(`server:${process.pid}`),
+  (error) => console.error('Library import validation failed', error),
+)
+importWorker.start()
 
 let shuttingDown = false
 
@@ -71,9 +68,10 @@ function shutdown(signal: string) {
   if (shuttingDown) return
   shuttingDown = true
   console.log(`Received ${signal}; shutting down`)
+  const workerStopped = importWorker.stop()
   server.close(async (error) => {
     try {
-      clearInterval(importWorker)
+      await workerStopped
       await discoveryCatalog.close()
       await publicReadStore.close()
       await importDraftStore.close()

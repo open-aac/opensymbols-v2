@@ -52,6 +52,14 @@ export class LibraryImportEngine {
     const id = this.id()
     const now = this.now()
     const uploadObjectKey = `imports/${id}/source.zip`
+    // Presigning has no persistent effect. Do it before committing the draft
+    // so an unavailable object store cannot leave a draft the caller never
+    // received and would duplicate on retry.
+    const upload = await this.storage.createUpload(
+      uploadObjectKey,
+      importLimits.archiveBytes,
+      uploadLifetimeSeconds,
+    )
     const draft = await this.store.createDraft({
       id,
       kind,
@@ -62,7 +70,7 @@ export class LibraryImportEngine {
       now: now.toISOString(),
       expiresAt: new Date(now.getTime() + 30 * dayMilliseconds).toISOString(),
     })
-    return { draft, upload: await this.uploadForDraft(draft) }
+    return { draft, upload }
   }
 
   async createUpload(importId: string) {
