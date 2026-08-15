@@ -169,9 +169,9 @@ export function AdministratorPage() {
       <p className="eyebrow">Open Symbols administration</p>
       <h1>Administrator tools</h1>
       <EmptyState
-        heading="Library imports are coming next"
-        description="Your administrator access is verified. Upload and review tools will appear here in the next implementation stage."
-        action={<ButtonLink to="/account">Return to your account</ButtonLink>}
+        heading="Library import review"
+        description="Upload symbol-library ZIP files into private quarantine, run security validation, and review the results before publication."
+        action={<ButtonLink to="/admin/imports" variant="primary">Open library imports</ButtonLink>}
       />
     </PageSection>
   )

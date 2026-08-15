@@ -1,0 +1,17 @@
+@layer components {
+  .admin-imports { max-width: var(--page-width); }
+  .admin-imports__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-5); }
+  .admin-imports__heading h1, .admin-imports__heading p { margin-top: 0; }
+  .admin-imports__cards { display: grid; gap: var(--space-4); margin-block: var(--space-5); }
+  .admin-import-card { padding: var(--space-5); border: 2px solid var(--color-border); }
+  .admin-import-card h2 { margin-block: var(--space-3) var(--space-2); }
+  .admin-import-card p { margin: 0; color: var(--color-text-muted); }
+  .admin-import-form { display: grid; max-width: 46rem; gap: var(--space-4); }
+  .admin-import-finding { margin-block: var(--space-3); padding: var(--space-4); background: var(--color-surface-muted); border: 2px solid var(--color-border); border-radius: var(--radius-md); }
+  .admin-import-finding h3 { margin-top: 0; overflow-wrap: anywhere; }
+  .admin-import-table-wrap { max-width: 100%; overflow-x: auto; }
+  .admin-import-table-wrap table { width: 100%; border-collapse: collapse; }
+  .admin-import-table-wrap th, .admin-import-table-wrap td { padding: var(--space-3); border: 1px solid var(--color-border); text-align: start; overflow-wrap: anywhere; }
+  @media (max-width: 40rem) { .admin-imports__heading { flex-direction: column; } }
+  @media (forced-colors: active) { .admin-import-card, .admin-import-finding, .admin-import-table-wrap th, .admin-import-table-wrap td { border-color: CanvasText; } }
+}

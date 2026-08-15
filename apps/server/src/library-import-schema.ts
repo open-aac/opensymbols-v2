@@ -11,6 +11,11 @@ CREATE TABLE IF NOT EXISTS library_imports (
   upload_object_key text NOT NULL UNIQUE,
   upload_size bigint,
   uploader_clerk_user_id text NOT NULL CHECK (length(uploader_clerk_user_id) > 0),
+  repository_key text,
+  repository_name text,
+  default_license text,
+  license_url text,
+  attribution_name text,
   created_at timestamptz NOT NULL,
   updated_at timestamptz NOT NULL,
   uploaded_at timestamptz,
@@ -23,6 +28,11 @@ CREATE TABLE IF NOT EXISTS library_imports (
     OR (kind = 'existing_library' AND repository_id IS NOT NULL)
   )
 );
+ALTER TABLE library_imports ADD COLUMN IF NOT EXISTS repository_key text;
+ALTER TABLE library_imports ADD COLUMN IF NOT EXISTS repository_name text;
+ALTER TABLE library_imports ADD COLUMN IF NOT EXISTS default_license text;
+ALTER TABLE library_imports ADD COLUMN IF NOT EXISTS license_url text;
+ALTER TABLE library_imports ADD COLUMN IF NOT EXISTS attribution_name text;
 CREATE INDEX IF NOT EXISTS index_library_imports_on_status_expiry
   ON library_imports(status, expires_at);
 CREATE INDEX IF NOT EXISTS index_library_imports_on_quarantine_cleanup

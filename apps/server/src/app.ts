@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { Hono } from 'hono'
+import { Readable } from 'node:stream'
+import { Hono, type Context } from 'hono'
 import { serveStatic } from '@hono/node-server/serve-static'
 import {
   findPublicRepository,
@@ -33,6 +34,13 @@ import {
 } from './character-api.js'
 import type { DiscoveryCatalog } from './discovery-catalog.js'
 import { PostgresDiscoveryCatalog } from './discovery-catalog.js'
+import type { ImportDraftStore, ImportObjectStorage } from './library-import-types.js'
+import {
+  LibraryImportEngine,
+  LibraryImportInputError,
+  LibraryImportNotFoundError,
+} from './library-import-engine.js'
+import { ImportStateConflictError } from './library-import-store.js'
 
 export interface AppOptions {
   legacyServerUrl?: string
@@ -54,6 +62,9 @@ export interface AppOptions {
   characterStore?: CharacterStore
   appNow?: () => Date
   characterId?: () => string
+  importDraftStore?: ImportDraftStore
+  libraryImportEngine?: LibraryImportEngine
+  importObjectStorage?: ImportObjectStorage
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -246,6 +257,179 @@ export function createApp(options: AppOptions = {}) {
 
     context.set('appSession', session)
     await next()
+  })
+
+  const importFailure = (context: Context, error: unknown) => {
+    if (error instanceof LibraryImportNotFoundError) return context.json({ error: 'not_found' as const }, 404)
+    if (error instanceof ImportStateConflictError) return context.json({ error: 'import_state_conflict' as const }, 409)
+    if (error instanceof LibraryImportInputError) return context.json({ error: 'invalid_import' as const }, 422)
+    return context.json({ error: 'import_service_unavailable' as const }, 503)
+  }
+  const importDraftResponse = <Draft extends { uploadObjectKey: string }>(draft: Draft) => {
+    const { uploadObjectKey: _privateObjectKey, ...response } = draft
+    void _privateObjectKey
+    return response
+  }
+  const importUploadResponse = <Upload extends { objectKey: string }>(upload: Upload) => {
+    const { objectKey: _privateObjectKey, ...response } = upload
+    void _privateObjectKey
+    return response
+  }
+
+  app.get('/api/app/admin/imports', async (context) => {
+    if (!options.importDraftStore) return context.json({ error: 'import_service_unavailable' as const }, 503)
+    try {
+      const imports = await options.importDraftStore.listDrafts()
+      return context.json({ imports: imports.map(importDraftResponse) })
+    } catch (error) {
+      return importFailure(context, error)
+    }
+  })
+
+  app.get('/api/app/admin/imports/repositories', async (context) => {
+    if (!options.importDraftStore) return context.json({ error: 'import_service_unavailable' as const }, 503)
+    try {
+      return context.json({ repositories: await options.importDraftStore.listPublicRepositories() })
+    } catch (error) {
+      return importFailure(context, error)
+    }
+  })
+
+  app.post('/api/app/admin/imports', async (context) => {
+    if (!options.libraryImportEngine) return context.json({ error: 'import_service_unavailable' as const }, 503)
+    let body: unknown
+    try { body = await context.req.json() } catch { return context.json({ error: 'invalid_import' as const }, 422) }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return context.json({ error: 'invalid_import' as const }, 422)
+    }
+    const input = body as Record<string, unknown>
+    const kind = input.kind
+    const repositoryId = input.repository_id
+    if (kind !== 'new_library' && kind !== 'existing_library') {
+      return context.json({ error: 'invalid_import' as const }, 422)
+    }
+    if (kind === 'new_library' && repositoryId !== null && repositoryId !== undefined) {
+      return context.json({ error: 'invalid_import' as const }, 422)
+    }
+    if (kind === 'existing_library' && (!Number.isSafeInteger(repositoryId) || Number(repositoryId) < 1)) {
+      return context.json({ error: 'invalid_import' as const }, 422)
+    }
+    if (kind === 'existing_library') {
+      if (!options.importDraftStore) return context.json({ error: 'import_service_unavailable' as const }, 503)
+      try {
+        if (!await options.importDraftStore.publicRepositoryExists(Number(repositoryId))) {
+          return context.json({ error: 'not_found' as const }, 404)
+        }
+      } catch { return context.json({ error: 'import_service_unavailable' as const }, 503) }
+    }
+    const metadataValues = ['repository_key', 'repository_name', 'default_license', 'license_url', 'attribution_name'] as const
+    if (kind === 'new_library' && metadataValues.some((key) => typeof input[key] !== 'string' || !input[key].trim())) {
+      return context.json({ error: 'invalid_import' as const }, 422)
+    }
+    if (kind === 'new_library') {
+      try {
+        if (new URL(String(input.license_url)).protocol !== 'https:') throw new Error('not https')
+      } catch {
+        return context.json({ error: 'invalid_import' as const }, 422)
+      }
+    }
+    try {
+      const created = await options.libraryImportEngine.createDraft(
+        context.get('appSession').userId,
+        kind,
+        kind === 'existing_library' ? Number(repositoryId) : null,
+        kind === 'new_library' ? {
+          repositoryKey: String(input.repository_key).trim(),
+          repositoryName: String(input.repository_name).trim(),
+          defaultLicense: String(input.default_license).trim(),
+          licenseUrl: String(input.license_url).trim(),
+          attributionName: String(input.attribution_name).trim(),
+        } : undefined,
+      )
+      context.header('Location', `/api/app/admin/imports/${created.draft.id}`)
+      return context.json({
+        draft: importDraftResponse(created.draft),
+        upload: importUploadResponse(created.upload),
+      }, 201)
+    } catch (error) {
+      return importFailure(context, error)
+    }
+  })
+
+  app.get('/api/app/admin/imports/:id', async (context) => {
+    if (!options.importDraftStore) return context.json({ error: 'import_service_unavailable' as const }, 503)
+    try {
+      const draft = await options.importDraftStore.findDraftDetail(context.req.param('id'))
+      return draft ? context.json({ import: importDraftResponse(draft) }) : context.json({ error: 'not_found' as const }, 404)
+    } catch (error) {
+      return importFailure(context, error)
+    }
+  })
+
+  app.post('/api/app/admin/imports/:id/upload', async (context) => {
+    if (!options.libraryImportEngine) return context.json({ error: 'import_service_unavailable' as const }, 503)
+    try {
+      return context.json({ upload: importUploadResponse(
+        await options.libraryImportEngine.createUpload(context.req.param('id')),
+      ) })
+    } catch (error) {
+      return importFailure(context, error)
+    }
+  })
+
+  app.put('/api/app/admin/imports/:id/content', async (context) => {
+    if (!options.importDraftStore || !options.importObjectStorage?.acceptUpload) {
+      return context.json({ error: 'not_found' as const }, 404)
+    }
+    try {
+      const draft = await options.importDraftStore.findDraft(context.req.param('id'))
+      if (!draft) return context.json({ error: 'not_found' as const }, 404)
+      if (draft.status !== 'awaiting_upload') return context.json({ error: 'import_state_conflict' as const }, 409)
+      if (context.req.header('content-type') !== 'application/zip') {
+        return context.json({ error: 'invalid_import' as const }, 422)
+      }
+      const stream = context.req.raw.body
+      if (!stream) return context.json({ error: 'invalid_import' as const }, 422)
+      await options.importObjectStorage.acceptUpload(
+        draft.uploadObjectKey,
+        Readable.fromWeb(stream as ReadableStream<Uint8Array>),
+        200 * 1024 * 1024,
+      )
+      return context.body(null, 204)
+    } catch (error) {
+      return importFailure(context, error)
+    }
+  })
+
+  app.post('/api/app/admin/imports/:id/complete-upload', async (context) => {
+    if (!options.libraryImportEngine) return context.json({ error: 'import_service_unavailable' as const }, 503)
+    try {
+      await options.libraryImportEngine.completeUpload(context.req.param('id'), context.get('appSession').userId)
+      return context.json({ queued: true as const }, 202)
+    } catch (error) {
+      return importFailure(context, error)
+    }
+  })
+
+  app.post('/api/app/admin/imports/:id/retry', async (context) => {
+    if (!options.libraryImportEngine) return context.json({ error: 'import_service_unavailable' as const }, 503)
+    try {
+      await options.libraryImportEngine.retryDraftValidation(context.req.param('id'), context.get('appSession').userId)
+      return context.json({ queued: true as const }, 202)
+    } catch (error) {
+      return importFailure(context, error)
+    }
+  })
+
+  app.post('/api/app/admin/imports/:id/cancel', async (context) => {
+    if (!options.libraryImportEngine) return context.json({ error: 'import_service_unavailable' as const }, 503)
+    try {
+      return context.json(await options.libraryImportEngine.cancelDraft(
+        context.req.param('id'), context.get('appSession').userId,
+      ))
+    } catch (error) {
+      return importFailure(context, error)
+    }
   })
 
   app.all('/api/app/*', (context) => context.json({ error: 'not_found' as const }, 404))

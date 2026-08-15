@@ -42,6 +42,7 @@ export class LibraryImportEngine {
     actorClerkUserId: string,
     kind: LibraryImportKind,
     repositoryId: number | null,
+    metadata?: Parameters<ImportDraftStore['createDraft']>[0]['metadata'],
   ): Promise<CreatedLibraryImport> {
     if (!actorClerkUserId) throw new LibraryImportInputError('A verified administrator actor is required.')
     if ((kind === 'new_library' && repositoryId !== null)
@@ -51,16 +52,25 @@ export class LibraryImportEngine {
     const id = this.id()
     const now = this.now()
     const uploadObjectKey = `imports/${id}/source.zip`
+    // Presigning has no persistent effect. Do it before committing the draft
+    // so an unavailable object store cannot leave a draft the caller never
+    // received and would duplicate on retry.
+    const upload = await this.storage.createUpload(
+      uploadObjectKey,
+      importLimits.archiveBytes,
+      uploadLifetimeSeconds,
+    )
     const draft = await this.store.createDraft({
       id,
       kind,
       repositoryId,
       uploadObjectKey,
       actorClerkUserId,
+      metadata,
       now: now.toISOString(),
       expiresAt: new Date(now.getTime() + 30 * dayMilliseconds).toISOString(),
     })
-    return { draft, upload: await this.uploadForDraft(draft) }
+    return { draft, upload }
   }
 
   async createUpload(importId: string) {

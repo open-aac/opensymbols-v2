@@ -73,6 +73,7 @@ export class S3ImportObjectStorage implements ImportObjectStorage {
     })
     return {
       ...result,
+      method: 'post',
       objectKey,
       expiresAt: new Date(this.now().getTime() + expiresInSeconds * 1000).toISOString(),
       maximumBytes,

@@ -22,6 +22,9 @@ function routeMetadata(pathname: string, search: string) {
   if (pathname === '/admin') {
     return { title: formatPageTitle('Administrator tools'), announcement: 'Administrator tools page loaded' }
   }
+  if (pathname === '/admin/imports') return { title: formatPageTitle('Library imports'), announcement: 'Library imports page loaded' }
+  if (pathname === '/admin/imports/new') return { title: formatPageTitle('New library import'), announcement: 'New library import page loaded' }
+  if (pathname.startsWith('/admin/imports/')) return { title: formatPageTitle('Library import review'), announcement: 'Library import review page loaded' }
 
   if (pathname === '/sign-in' || pathname.startsWith('/sign-in/')) {
     return { title: formatPageTitle('Sign in'), announcement: 'Sign in page loaded' }

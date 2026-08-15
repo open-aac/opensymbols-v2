@@ -31,6 +31,10 @@ class FakeStore implements ImportDraftStore {
     return this.draft
   }
   async findDraft() { return this.draft }
+  async listDrafts() { return this.draft ? [this.draft] : [] }
+  async findDraftDetail() { return null }
+  async listPublicRepositories() { return [] }
+  async publicRepositoryExists() { return true }
   async markUploaded(_importId: string, _actor: string, _size: number, timestamp: string) {
     if (this.draft) this.draft = { ...this.draft, status: 'uploaded', updatedAt: timestamp }
   }
@@ -64,7 +68,7 @@ class FakeStorage implements ImportObjectStorage {
   source: Buffer<ArrayBufferLike> = Buffer.from('not a zip')
   async createUpload(objectKey: string, maximumBytes: number, expiresInSeconds: number) {
     return {
-      url: 'https://uploads.example.test', fields: {}, objectKey, maximumBytes,
+      method: 'post' as const, url: 'https://uploads.example.test', fields: {}, objectKey, maximumBytes,
       expiresAt: new Date(now.getTime() + expiresInSeconds * 1000).toISOString(),
     }
   }
@@ -97,6 +101,16 @@ describe('LibraryImportEngine', () => {
     expect(created.draft.expiresAt).toBe('2026-09-12T10:00:00.000Z')
     expect(created.upload.objectKey).toBe(`imports/${id}/source.zip`)
     expect(created.upload.maximumBytes).toBe(200 * 1024 * 1024)
+  })
+
+  it('does not persist a draft when upload authorization fails', async () => {
+    const store = new FakeStore()
+    const storage = new FakeStorage()
+    vi.spyOn(storage, 'createUpload').mockRejectedValueOnce(new Error('object storage unavailable'))
+    const engine = new LibraryImportEngine(store, storage, { now: () => now, id: () => id })
+
+    await expect(engine.createDraft('user_admin', 'new_library', null)).rejects.toThrow(/unavailable/)
+    expect(store.draft).toBeNull()
   })
 
   it('rejects mismatched repository identity and invalid uploaded objects', async () => {

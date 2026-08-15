@@ -122,8 +122,9 @@ describe('account dashboard', () => {
     const view = renderAccount('/admin')
 
     expect(await screen.findByRole('heading', { name: 'Administrator tools' })).toBeVisible()
-    expect(screen.getByRole('heading', { name: 'Library imports are coming next' })).toBeVisible()
-    expect(screen.queryByRole('button', { name: /upload|publish|import/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Library import review' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Open library imports' })).toHaveAttribute('href', '/admin/imports')
+    expect(screen.queryByRole('button', { name: /publish/i })).not.toBeInTheDocument()
     await expectNoAccessibilityViolations(view.container)
   })
 

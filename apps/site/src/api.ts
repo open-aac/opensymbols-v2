@@ -23,6 +23,40 @@ export interface AppSessionResponse {
   administrator: boolean
 }
 
+export type LibraryImportStatus = 'awaiting_upload' | 'uploaded' | 'validating' | 'review_ready' | 'invalid'
+  | 'publishing' | 'published_search_pending' | 'published' | 'publish_failed' | 'expired' | 'canceled'
+
+export interface LibraryImportDraft {
+  id: string
+  kind: 'new_library' | 'existing_library'
+  repositoryId: number | null
+  status: LibraryImportStatus
+  uploaderClerkUserId: string
+  createdAt: string
+  updatedAt: string
+  expiresAt: string
+  repositoryKey?: string | null
+  repositoryName?: string | null
+  defaultLicense?: string | null
+  licenseUrl?: string | null
+  attributionName?: string | null
+}
+
+export interface LibraryImportDetail extends LibraryImportDraft {
+  uploadSize: number | null
+  files: Array<{ path: string; mediaType: string; size: number; sha256: string; sanitized: boolean }>
+  results: Array<{ path: string | null; code: string; severity: 'error' | 'warning'; message: string }>
+  auditEvents: Array<{ actorClerkUserId: string; eventType: string; createdAt: string }>
+}
+
+export interface ImportUpload {
+  method: 'post' | 'put'
+  url: string
+  fields: Record<string, string>
+  expiresAt: string
+  maximumBytes: number
+}
+
 export type CharacterSkinColour = 'original' | 'light' | 'medium-light' | 'medium' | 'medium-dark' | 'dark'
 export type CharacterHairColour = 'original' | 'black' | 'dark-brown' | 'brown' | 'light-brown' | 'blond' | 'auburn' | 'grey' | 'white'
 export type CharacterShirtColour = 'original' | 'black' | 'white' | 'grey' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple'
@@ -207,6 +241,82 @@ export async function getAppSession(getToken: () => Promise<string | null>) {
     throw new ApiError(`Request failed with status ${response.status}`, response.status)
   }
   return response.json() as Promise<AppSessionResponse>
+}
+
+export async function getLibraryImports(getToken: () => Promise<string | null>) {
+  return (await characterRequest<{ imports: LibraryImportDraft[] }>(getToken, '/api/app/admin/imports')).imports
+}
+
+export async function getLibraryImportRepositories(getToken: () => Promise<string | null>) {
+  return (await characterRequest<{ repositories: Array<{ id: number; key: string; name: string }> }>(
+    getToken,
+    '/api/app/admin/imports/repositories',
+  )).repositories
+}
+
+export async function getLibraryImport(getToken: () => Promise<string | null>, id: string) {
+  return (await characterRequest<{ import: LibraryImportDetail }>(
+    getToken, `/api/app/admin/imports/${encodeURIComponent(id)}`,
+  )).import
+}
+
+export async function createLibraryImport(
+  getToken: () => Promise<string | null>,
+  input: {
+    kind: 'new_library' | 'existing_library'
+    repository_id: number | null
+    repository_key?: string
+    repository_name?: string
+    default_license?: string
+    license_url?: string
+    attribution_name?: string
+  },
+) {
+  return characterRequest<{ draft: LibraryImportDraft; upload: ImportUpload }>(getToken, '/api/app/admin/imports', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+}
+
+export function uploadLibraryImport(
+  getToken: () => Promise<string | null>,
+  upload: ImportUpload,
+  file: File,
+  onProgress: (percentage: number) => void,
+) {
+  return new Promise<void>((resolve, reject) => {
+    void getToken().then((token) => {
+      const request = new XMLHttpRequest()
+      request.open(upload.method === 'put' ? 'PUT' : 'POST', upload.url)
+      if (upload.method === 'put' && token) request.setRequestHeader('Authorization', `Bearer ${token}`)
+      if (upload.method === 'put') request.setRequestHeader('Content-Type', 'application/zip')
+      request.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100))
+      })
+      request.addEventListener('load', () => request.status >= 200 && request.status < 300
+        ? resolve() : reject(new ApiError(`Upload failed with status ${request.status}`, request.status)))
+      request.addEventListener('error', () => reject(new ApiError('Upload failed', 0)))
+      if (upload.method === 'post') {
+        const form = new FormData()
+        Object.entries(upload.fields).forEach(([name, value]) => form.append(name, value))
+        form.append('file', file)
+        request.send(form)
+      } else request.send(file)
+    }).catch(reject)
+  })
+}
+
+export async function completeLibraryImportUpload(getToken: () => Promise<string | null>, id: string) {
+  await characterRequest(getToken, `/api/app/admin/imports/${encodeURIComponent(id)}/complete-upload`, { method: 'POST' })
+}
+
+export async function cancelLibraryImport(getToken: () => Promise<string | null>, id: string) {
+  await characterRequest(getToken, `/api/app/admin/imports/${encodeURIComponent(id)}/cancel`, { method: 'POST' })
+}
+
+export async function retryLibraryImport(getToken: () => Promise<string | null>, id: string) {
+  await characterRequest(getToken, `/api/app/admin/imports/${encodeURIComponent(id)}/retry`, { method: 'POST' })
 }
 
 async function characterRequest<T>(
