@@ -12,6 +12,12 @@ import type {
   CharacterListResult,
   CharacterRecord,
   CharacterResult,
+  CharacterSymbolDeleteResult,
+  CharacterSymbolListResult,
+  CharacterSymbolRecord,
+  CharacterSymbolResult,
+  CharacterSymbolUpdateResult,
+  CharacterSymbolWrite,
   CharacterStore,
   CharacterUpdateResult,
   CharacterWrite,
@@ -51,14 +57,21 @@ interface CharacterDatabaseRow extends QueryResultRow {
   id: string
   clerk_user_id: string
   name: string
-  template_key: string
-  template_version: number
-  configuration_version: number
-  settings: {
-    skinColour: CharacterRecord['settings']['skinColour']
-    hairColour?: CharacterRecord['settings']['hairColour']
-    shirtColour?: CharacterRecord['settings']['shirtColour']
-  }
+  template_key: CharacterRecord['templateKey']
+  template_version: CharacterRecord['templateVersion']
+  configuration_version: CharacterRecord['configurationVersion']
+  identity: CharacterRecord['identity']
+  revision: number
+  created_at: Date | string
+  updated_at: Date | string
+}
+
+interface CharacterSymbolDatabaseRow extends QueryResultRow {
+  id: string
+  character_id: string
+  name: string
+  configuration_version: CharacterSymbolRecord['configurationVersion']
+  action: CharacterSymbolRecord['action']
   revision: number
   created_at: Date | string
   updated_at: Date | string
@@ -259,7 +272,7 @@ export class PostgresPublicReadStore implements PublicApiStore, CharacterStore {
       if (!await this.ensureActiveAppUser(session, clerkUserId, now)) return { kind: 'account_deleted' }
       const result = await session.query<CharacterDatabaseRow>(
         `SELECT id, clerk_user_id, name, template_key, template_version,
-                configuration_version, settings, revision, created_at, updated_at
+                configuration_version, identity, revision, created_at, updated_at
          FROM characters
          WHERE clerk_user_id = $1
          ORDER BY updated_at DESC, id DESC`,
@@ -274,7 +287,7 @@ export class PostgresPublicReadStore implements PublicApiStore, CharacterStore {
       if (!await this.ensureActiveAppUser(session, clerkUserId, now)) return { kind: 'account_deleted' }
       const result = await session.query<CharacterDatabaseRow>(
         `SELECT id, clerk_user_id, name, template_key, template_version,
-                configuration_version, settings, revision, created_at, updated_at
+                configuration_version, identity, revision, created_at, updated_at
          FROM characters
          WHERE id = $1 AND clerk_user_id = $2
          LIMIT 1`,
@@ -296,10 +309,10 @@ export class PostgresPublicReadStore implements PublicApiStore, CharacterStore {
       const result = await session.query<CharacterDatabaseRow>(
         `INSERT INTO characters
            (id, clerk_user_id, name, template_key, template_version,
-            configuration_version, settings, revision, created_at, updated_at)
+            configuration_version, identity, revision, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $8)
          RETURNING id, clerk_user_id, name, template_key, template_version,
-                   configuration_version, settings, revision, created_at, updated_at`,
+                   configuration_version, identity, revision, created_at, updated_at`,
         [
           id,
           clerkUserId,
@@ -307,7 +320,7 @@ export class PostgresPublicReadStore implements PublicApiStore, CharacterStore {
           character.templateKey,
           character.templateVersion,
           character.configurationVersion,
-          character.settings,
+          character.identity,
           now,
         ],
       )
@@ -327,11 +340,11 @@ export class PostgresPublicReadStore implements PublicApiStore, CharacterStore {
       const result = await session.query<CharacterDatabaseRow>(
         `UPDATE characters
          SET name = $3, template_key = $4, template_version = $5,
-             configuration_version = $6, settings = $7,
+             configuration_version = $6, identity = $7,
              revision = revision + 1, updated_at = $8
          WHERE id = $1 AND clerk_user_id = $2 AND revision = $9
          RETURNING id, clerk_user_id, name, template_key, template_version,
-                   configuration_version, settings, revision, created_at, updated_at`,
+                   configuration_version, identity, revision, created_at, updated_at`,
         [
           id,
           clerkUserId,
@@ -339,7 +352,7 @@ export class PostgresPublicReadStore implements PublicApiStore, CharacterStore {
           character.templateKey,
           character.templateVersion,
           character.configurationVersion,
-          character.settings,
+          character.identity,
           now,
           revision,
         ],
@@ -357,8 +370,124 @@ export class PostgresPublicReadStore implements PublicApiStore, CharacterStore {
   async deleteCharacter(clerkUserId: string, id: string, now: string): Promise<CharacterDeleteResult> {
     return this.database.transaction(async (session) => {
       if (!await this.ensureActiveAppUser(session, clerkUserId, now)) return { kind: 'account_deleted' }
+      const owner = await session.query<QueryResultRow>(
+        'SELECT 1 FROM characters WHERE id = $1 AND clerk_user_id = $2 FOR UPDATE',
+        [id, clerkUserId],
+      )
+      if (!owner.rows.length) return { kind: 'not_found' }
+      const dependent = await session.query<{ count: string } & QueryResultRow>(
+        `SELECT COUNT(character_symbols.id)::text AS count
+         FROM characters
+         LEFT JOIN character_symbols ON character_symbols.character_id = characters.id
+         WHERE characters.id = $1 AND characters.clerk_user_id = $2`,
+        [id, clerkUserId],
+      )
+      const symbolCount = Number.parseInt(dependent.rows[0]?.count ?? '0', 10)
+      if (symbolCount > 0) return { kind: 'has_symbols', symbolCount }
       const result = await session.query<QueryResultRow>(
         'DELETE FROM characters WHERE id = $1 AND clerk_user_id = $2 RETURNING id',
+        [id, clerkUserId],
+      )
+      return result.rows.length ? { kind: 'deleted' } : { kind: 'not_found' }
+    })
+  }
+
+  async listCharacterSymbols(clerkUserId: string, characterId: string, now: string): Promise<CharacterSymbolListResult> {
+    return this.database.transaction(async (session) => {
+      if (!await this.ensureActiveAppUser(session, clerkUserId, now)) return { kind: 'account_deleted' }
+      const owner = await session.query<QueryResultRow>('SELECT 1 FROM characters WHERE id = $1 AND clerk_user_id = $2', [characterId, clerkUserId])
+      if (!owner.rows.length) return { kind: 'not_found' }
+      const result = await session.query<CharacterSymbolDatabaseRow>(
+        `SELECT id, character_id, name, configuration_version, action, revision, created_at, updated_at
+         FROM character_symbols WHERE character_id = $1 ORDER BY updated_at DESC, id DESC`,
+        [characterId],
+      )
+      return { kind: 'ok', symbols: result.rows.map((row) => this.characterSymbolRecord(row)) }
+    })
+  }
+
+  async findCharacterSymbol(clerkUserId: string, id: string, now: string): Promise<CharacterSymbolResult> {
+    return this.database.transaction(async (session) => {
+      if (!await this.ensureActiveAppUser(session, clerkUserId, now)) return { kind: 'account_deleted' }
+      const result = await session.query<CharacterSymbolDatabaseRow>(
+        `SELECT character_symbols.id, character_symbols.character_id, character_symbols.name,
+                character_symbols.configuration_version, character_symbols.action,
+                character_symbols.revision, character_symbols.created_at, character_symbols.updated_at
+         FROM character_symbols
+         INNER JOIN characters ON characters.id = character_symbols.character_id
+         WHERE character_symbols.id = $1 AND characters.clerk_user_id = $2 LIMIT 1`,
+        [id, clerkUserId],
+      )
+      const row = result.rows[0]
+      return row ? { kind: 'ok', symbol: this.characterSymbolRecord(row) } : { kind: 'not_found' }
+    })
+  }
+
+  async createCharacterSymbol(
+    clerkUserId: string,
+    characterId: string,
+    id: string,
+    symbol: CharacterSymbolWrite,
+    now: string,
+  ): Promise<CharacterSymbolResult> {
+    return this.database.transaction(async (session) => {
+      if (!await this.ensureActiveAppUser(session, clerkUserId, now)) return { kind: 'account_deleted' }
+      const owner = await session.query<QueryResultRow>('SELECT 1 FROM characters WHERE id = $1 AND clerk_user_id = $2', [characterId, clerkUserId])
+      if (!owner.rows.length) return { kind: 'not_found' }
+      const result = await session.query<CharacterSymbolDatabaseRow>(
+        `INSERT INTO character_symbols
+           (id, character_id, name, configuration_version, action, revision, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, 1, $6, $6)
+         RETURNING id, character_id, name, configuration_version, action, revision, created_at, updated_at`,
+        [id, characterId, symbol.name, symbol.configurationVersion, symbol.action, now],
+      )
+      return { kind: 'ok', symbol: this.characterSymbolRecord(result.rows[0]!) }
+    })
+  }
+
+  async updateCharacterSymbol(
+    clerkUserId: string,
+    id: string,
+    symbol: CharacterSymbolWrite,
+    revision: number,
+    now: string,
+  ): Promise<CharacterSymbolUpdateResult> {
+    return this.database.transaction(async (session) => {
+      if (!await this.ensureActiveAppUser(session, clerkUserId, now)) return { kind: 'account_deleted' }
+      const result = await session.query<CharacterSymbolDatabaseRow>(
+        `UPDATE character_symbols
+         SET name = $3, configuration_version = $4, action = $5,
+             revision = character_symbols.revision + 1, updated_at = $6
+         FROM characters
+         WHERE character_symbols.id = $1
+           AND characters.id = character_symbols.character_id
+           AND characters.clerk_user_id = $2
+           AND character_symbols.revision = $7
+         RETURNING character_symbols.id, character_symbols.character_id, character_symbols.name,
+                   character_symbols.configuration_version, character_symbols.action,
+                   character_symbols.revision, character_symbols.created_at, character_symbols.updated_at`,
+        [id, clerkUserId, symbol.name, symbol.configurationVersion, symbol.action, now, revision],
+      )
+      const row = result.rows[0]
+      if (row) return { kind: 'ok', symbol: this.characterSymbolRecord(row) }
+      const existing = await session.query<QueryResultRow>(
+        `SELECT 1 FROM character_symbols INNER JOIN characters ON characters.id = character_symbols.character_id
+         WHERE character_symbols.id = $1 AND characters.clerk_user_id = $2 LIMIT 1`,
+        [id, clerkUserId],
+      )
+      return existing.rows.length ? { kind: 'conflict' } : { kind: 'not_found' }
+    })
+  }
+
+  async deleteCharacterSymbol(clerkUserId: string, id: string, now: string): Promise<CharacterSymbolDeleteResult> {
+    return this.database.transaction(async (session) => {
+      if (!await this.ensureActiveAppUser(session, clerkUserId, now)) return { kind: 'account_deleted' }
+      const result = await session.query<QueryResultRow>(
+        `DELETE FROM character_symbols USING characters
+         WHERE character_symbols.id = $1
+           AND characters.id = character_symbols.character_id
+           AND characters.clerk_user_id = $2
+         RETURNING character_symbols.id`,
         [id, clerkUserId],
       )
       return result.rows.length ? { kind: 'deleted' } : { kind: 'not_found' }
@@ -375,6 +504,11 @@ export class PostgresPublicReadStore implements PublicApiStore, CharacterStore {
         [clerkUserId, now],
       )
       await session.query('SELECT clerk_user_id FROM app_users WHERE clerk_user_id = $1 FOR UPDATE', [clerkUserId])
+      await session.query(
+        `DELETE FROM character_symbols USING characters
+         WHERE characters.clerk_user_id = $1 AND characters.id = character_symbols.character_id`,
+        [clerkUserId],
+      )
       await session.query('DELETE FROM characters WHERE clerk_user_id = $1', [clerkUserId])
     })
   }
@@ -433,11 +567,21 @@ export class PostgresPublicReadStore implements PublicApiStore, CharacterStore {
       templateKey: row.template_key,
       templateVersion: row.template_version,
       configurationVersion: row.configuration_version,
-      settings: {
-        skinColour: row.settings.skinColour,
-        hairColour: row.settings.hairColour ?? 'original',
-        shirtColour: row.settings.shirtColour ?? 'original',
-      },
+      identity: row.identity,
+      revision: row.revision,
+      createdAt: date(row.created_at),
+      updatedAt: date(row.updated_at),
+    }
+  }
+
+  private characterSymbolRecord(row: CharacterSymbolDatabaseRow): CharacterSymbolRecord {
+    const date = (value: Date | string) => value instanceof Date ? value.toISOString() : new Date(value).toISOString()
+    return {
+      id: row.id,
+      characterId: row.character_id,
+      name: row.name,
+      configurationVersion: row.configuration_version,
+      action: row.action,
       revision: row.revision,
       createdAt: date(row.created_at),
       updatedAt: date(row.updated_at),

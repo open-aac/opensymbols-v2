@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "pnpm legacy:up && pnpm dev:apps",
-    "dev:apps": "pnpm --parallel --stream --filter @opensymbols/site --filter @opensymbols/server dev",
+    "dev:apps": "pnpm --filter @opensymbols/avatar-svg build && pnpm --parallel --stream --filter @opensymbols/site --filter @opensymbols/server dev",
     "data:generate": "pnpm --filter @opensymbols/server data:generate",
     "data:scale": "pnpm --filter @opensymbols/server data:scale",
     "beta:load": "pnpm --filter @opensymbols/server beta:load",
@@ -31,6 +31,7 @@
     "avatar:compile": "pnpm --filter @opensymbols/avatar-svg art:compile",
     "avatar:validate": "pnpm --filter @opensymbols/avatar-svg art:validate",
     "avatar:test:browser": "pnpm --filter @opensymbols/avatar-svg test:browser",
+    "avatar:db:reset": "docker compose build legacy-server && docker compose up -d --wait postgres && docker compose stop legacy-server && docker compose run --rm legacy-server bash -lc \"bundle exec rails db:environment:set RAILS_ENV=development && bundle exec rails db:drop db:create db:schema:load db:seed\" && docker compose up -d --wait legacy-server",
     "build": "pnpm --filter @opensymbols/avatar-svg build && pnpm --filter @opensymbols/site --filter @opensymbols/server --filter @opensymbols/search-import build",
     "typecheck": "pnpm --filter @opensymbols/avatar-svg typecheck && pnpm --filter @opensymbols/site --filter @opensymbols/server --filter @opensymbols/search-import typecheck",
     "lint": "eslint apps/site apps/server apps/search-import packages/avatar-svg",

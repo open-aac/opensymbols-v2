@@ -74,6 +74,51 @@ export interface CharacterActionV1 {
   mirrored: boolean
 }
 
+export interface CharacterApiWriteV1 {
+  name: string
+  template_key: 'modular-svg-avatar'
+  template_version: 1
+  configuration_version: 1
+  identity: CharacterIdentityV1
+  revision?: number
+}
+
+export interface CharacterApiRecordV1 extends Omit<CharacterApiWriteV1, 'revision'> {
+  id: string
+  revision: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CharacterSymbolApiWriteV1 {
+  name: string
+  configuration_version: 1
+  action: CharacterActionV1
+  revision?: number
+}
+
+export interface CharacterSymbolApiRecordV1 extends Omit<CharacterSymbolApiWriteV1, 'revision'> {
+  id: string
+  character_id: string
+  revision: number
+  created_at: string
+  updated_at: string
+}
+
+export type CharacterApiErrorCode =
+  | 'authentication_unconfigured'
+  | 'authentication_required'
+  | 'database_unavailable'
+  | 'account_deleted'
+  | 'invalid_character'
+  | 'invalid_character_symbol'
+  | 'unsupported_avatar_selection'
+  | 'avatar_art_unavailable'
+  | 'character_conflict'
+  | 'character_symbol_conflict'
+  | 'character_has_symbols'
+  | 'not_found'
+
 export interface SvgBounds {
   x: number
   y: number

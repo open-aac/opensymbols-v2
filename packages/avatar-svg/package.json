@@ -5,22 +5,22 @@
   "type": "module",
   "files": ["dist"],
   "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "types": "./src/index.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./src/index.ts",
       "default": "./dist/index.js"
     },
     "./contracts": {
-      "types": "./dist/contracts.d.ts",
+      "types": "./src/contracts.ts",
       "default": "./dist/contracts.js"
     },
     "./react": {
-      "types": "./dist/react.d.ts",
+      "types": "./src/react.tsx",
       "default": "./dist/react.js"
     },
     "./browser": {
-      "types": "./dist/browser.d.ts",
+      "types": "./src/browser.ts",
       "default": "./dist/browser.js"
     }
   },

@@ -1,5 +1,13 @@
 import type { PaginatedSymbols, Repository, SymbolResult } from './types'
 
+export type {
+  CharacterApiErrorCode,
+  CharacterApiRecordV1,
+  CharacterApiWriteV1,
+  CharacterSymbolApiRecordV1,
+  CharacterSymbolApiWriteV1,
+} from '@opensymbols/avatar-svg/contracts'
+
 const MAX_INTERACTIVE_RESPONSE_LENGTH = 8_000
 
 export interface InteractiveApiResult<T = unknown> {

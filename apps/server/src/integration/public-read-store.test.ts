@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { createApp } from '../app.js'
 import { decodeGoSecure } from '../go-secure.js'
 import { createPostgresPublicReadStore } from '../public-read-store.js'
+import { testAction, testIdentity } from '../test-fixtures/avatar-art-kit.js'
 
 const databaseIntegration = process.env.RUN_DATABASE_INTEGRATION === '1' ? describe : describe.skip
 
@@ -72,13 +73,25 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
           template_key varchar NOT NULL,
           template_version integer NOT NULL,
           configuration_version integer NOT NULL,
-          settings jsonb NOT NULL DEFAULT '{}'::jsonb,
+          identity jsonb NOT NULL DEFAULT '{}'::jsonb,
           revision integer NOT NULL DEFAULT 1,
           created_at timestamp NOT NULL,
           updated_at timestamp NOT NULL
         );
         CREATE INDEX index_characters_on_owner_and_updated_at
           ON characters (clerk_user_id, updated_at, id);
+        CREATE TABLE character_symbols (
+          id uuid PRIMARY KEY,
+          character_id uuid NOT NULL REFERENCES characters(id) ON DELETE RESTRICT,
+          name varchar(80) NOT NULL,
+          configuration_version integer NOT NULL,
+          action jsonb NOT NULL DEFAULT '{}'::jsonb,
+          revision integer NOT NULL DEFAULT 1,
+          created_at timestamp NOT NULL,
+          updated_at timestamp NOT NULL
+        );
+        CREATE INDEX index_character_symbols_on_character_and_updated_at
+          ON character_symbols (character_id, updated_at, id);
       `)
       await setup.query(
         'INSERT INTO symbol_repositories (repo_key, settings) VALUES ($1, $2)',
@@ -213,10 +226,10 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
 
       const characterWrite = {
         name: 'Alex',
-        templateKey: 'base-character-prototype',
-        templateVersion: 1,
-        configurationVersion: 1,
-        settings: { skinColour: 'medium' as const, hairColour: 'brown' as const, shirtColour: 'blue' as const },
+        templateKey: 'modular-svg-avatar' as const,
+        templateVersion: 1 as const,
+        configurationVersion: 1 as const,
+        identity: testIdentity,
       }
       const firstCharacter = await store.createCharacter(
         'user_alex',
@@ -228,27 +241,13 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
       await store.createCharacter(
         'user_alex',
         '10000000-0000-4000-8000-000000000002',
-        { ...characterWrite, name: 'Sam', settings: { skinColour: 'dark', hairColour: 'grey', shirtColour: 'red' } },
+        { ...characterWrite, name: 'Sam', identity: { ...testIdentity, selections: { ...testIdentity.selections, frontHair: null } } },
         '2026-08-03T13:00:00.000Z',
       )
       await expect(store.listCharacters('user_alex', '2026-08-03T14:00:00.000Z')).resolves.toMatchObject({
         kind: 'ok',
         characters: [{ name: 'Sam' }, { name: 'Alex' }],
       })
-      await setup.query(`
-        INSERT INTO characters
-          (id, clerk_user_id, name, template_key, template_version,
-           configuration_version, settings, revision, created_at, updated_at)
-        VALUES
-          ('10000000-0000-4000-8000-000000000003', 'user_alex', 'Legacy',
-           'base-character-prototype', 1, 1, '{"skinColour":"medium"}'::jsonb, 1,
-           '2026-08-03T12:00:00.000Z', '2026-08-03T12:00:00.000Z')
-      `)
-      await expect(store.findCharacter(
-        'user_alex',
-        '10000000-0000-4000-8000-000000000003',
-        '2026-08-03T14:00:00.000Z',
-      )).resolves.toMatchObject({ kind: 'ok', character: { settings: { hairColour: 'original', shirtColour: 'original' } } })
       await expect(store.findCharacter(
         'user_other',
         '10000000-0000-4000-8000-000000000001',
@@ -272,6 +271,74 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
         ),
       ])
       expect(concurrentUpdates.map((result) => result.kind).sort()).toEqual(['conflict', 'ok'])
+
+      const symbolWrite = { name: 'Alex waves', configurationVersion: 1 as const, action: testAction }
+      await expect(store.createCharacterSymbol(
+        'user_alex',
+        '10000000-0000-4000-8000-000000000001',
+        '20000000-0000-4000-8000-000000000001',
+        symbolWrite,
+        '2026-08-03T14:30:00.000Z',
+      )).resolves.toMatchObject({ kind: 'ok', symbol: { name: 'Alex waves', revision: 1 } })
+      await store.createCharacterSymbol(
+        'user_alex',
+        '10000000-0000-4000-8000-000000000001',
+        '20000000-0000-4000-8000-000000000002',
+        { ...symbolWrite, name: 'Alex waves again' },
+        '2026-08-03T14:31:00.000Z',
+      )
+      await expect(setup.query(
+        "DELETE FROM characters WHERE id = '10000000-0000-4000-8000-000000000001'",
+      )).rejects.toMatchObject({ code: '23503' })
+      await expect(store.listCharacterSymbols(
+        'user_alex', '10000000-0000-4000-8000-000000000001', '2026-08-03T14:32:00.000Z',
+      )).resolves.toMatchObject({ kind: 'ok', symbols: [{ name: 'Alex waves again' }, { name: 'Alex waves' }] })
+      await expect(store.findCharacterSymbol(
+        'user_other', '20000000-0000-4000-8000-000000000001', '2026-08-03T14:33:00.000Z',
+      )).resolves.toEqual({ kind: 'not_found' })
+      const identityBeforeSymbolUpdate = await setup.query<{ identity: typeof testIdentity }>(
+        "SELECT identity FROM characters WHERE id = '10000000-0000-4000-8000-000000000001'",
+      )
+      const siblingBeforeSymbolUpdate = await setup.query<{ action: typeof testAction; revision: number }>(
+        "SELECT action, revision FROM character_symbols WHERE id = '20000000-0000-4000-8000-000000000002'",
+      )
+      const symbolUpdates = await Promise.all([
+        store.updateCharacterSymbol(
+          'user_alex', '20000000-0000-4000-8000-000000000001', { ...symbolWrite, name: 'First update' }, 1, '2026-08-03T14:34:00.000Z',
+        ),
+        store.updateCharacterSymbol(
+          'user_alex', '20000000-0000-4000-8000-000000000001', { ...symbolWrite, name: 'Second update' }, 1, '2026-08-03T14:34:01.000Z',
+        ),
+      ])
+      expect(symbolUpdates.map((result) => result.kind).sort()).toEqual(['conflict', 'ok'])
+      expect((await setup.query<{ identity: typeof testIdentity }>(
+        "SELECT identity FROM characters WHERE id = '10000000-0000-4000-8000-000000000001'",
+      )).rows).toEqual(identityBeforeSymbolUpdate.rows)
+      expect((await setup.query<{ action: typeof testAction; revision: number }>(
+        "SELECT action, revision FROM character_symbols WHERE id = '20000000-0000-4000-8000-000000000002'",
+      )).rows).toEqual(siblingBeforeSymbolUpdate.rows)
+      await expect(store.deleteCharacter(
+        'user_alex', '10000000-0000-4000-8000-000000000001', '2026-08-03T14:35:00.000Z',
+      )).resolves.toEqual({ kind: 'has_symbols', symbolCount: 2 })
+      const storedActionBeforeIdentityUpdate = await setup.query<{ action: typeof testAction }>(
+        "SELECT action FROM character_symbols WHERE id = '20000000-0000-4000-8000-000000000001'",
+      )
+      await store.updateCharacter(
+        'user_alex', '10000000-0000-4000-8000-000000000001', { ...characterWrite, name: 'Identity changed' }, 2, '2026-08-03T14:36:00.000Z',
+      )
+      const storedActionAfterIdentityUpdate = await setup.query<{ action: typeof testAction }>(
+        "SELECT action FROM character_symbols WHERE id = '20000000-0000-4000-8000-000000000001'",
+      )
+      expect(storedActionAfterIdentityUpdate.rows[0]?.action).toEqual(storedActionBeforeIdentityUpdate.rows[0]?.action)
+      await store.deleteCharacterSymbol('user_alex', '20000000-0000-4000-8000-000000000001', '2026-08-03T14:37:00.000Z')
+      await store.deleteCharacterSymbol('user_alex', '20000000-0000-4000-8000-000000000002', '2026-08-03T14:38:00.000Z')
+      await store.createCharacterSymbol(
+        'user_alex',
+        '10000000-0000-4000-8000-000000000002',
+        '20000000-0000-4000-8000-000000000003',
+        { ...symbolWrite, name: 'Sam waves' },
+        '2026-08-03T14:39:00.000Z',
+      )
       await expect(store.deleteCharacter(
         'user_other',
         '10000000-0000-4000-8000-000000000001',
@@ -292,7 +359,10 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
         WHERE app_users.clerk_user_id = 'user_alex'
         GROUP BY app_users.deleted_at
       `)
-      expect(rolledBack.rows[0]).toMatchObject({ deleted_at: null, count: '3' })
+      expect(rolledBack.rows[0]).toMatchObject({ deleted_at: null, count: '2' })
+      expect((await setup.query<{ count: string }>(
+        "SELECT COUNT(*)::text AS count FROM character_symbols WHERE id = '20000000-0000-4000-8000-000000000003'",
+      )).rows[0]?.count).toBe('1')
       await setup.query('DROP TRIGGER fail_character_delete ON characters; DROP FUNCTION fail_character_delete();')
 
       await store.deleteClerkUser('user_alex', '2026-08-03T16:00:00.000Z')
@@ -304,6 +374,9 @@ databaseIntegration('PostgresPublicReadStore integration', () => {
         "SELECT COUNT(*)::text AS count FROM characters WHERE clerk_user_id = 'user_alex'",
       )
       expect(deletedCharacterCount.rows[0]?.count).toBe('0')
+      expect((await setup.query<{ count: string }>(
+        'SELECT COUNT(*)::text AS count FROM character_symbols',
+      )).rows[0]?.count).toBe('0')
     } finally {
       await setup?.end()
       await store?.close()

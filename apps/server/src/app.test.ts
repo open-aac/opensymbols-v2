@@ -2,7 +2,8 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { app, createApp } from './app.js'
 import type { DiscoveryCatalog } from './discovery-catalog.js'
-import type { CharacterRecord, CharacterStore } from './character-store.js'
+import type { CharacterRecord, CharacterStore, CharacterSymbolRecord } from './character-store.js'
+import { testAction, testAvatarArtKit, testIdentity } from './test-fixtures/avatar-art-kit.js'
 
 describe('GET /api/health', () => {
   it('reports that the server is healthy', async () => {
@@ -89,21 +90,33 @@ describe('Clerk-owned character API', () => {
     id,
     clerkUserId: 'user_example',
     name: 'Sam',
-    templateKey: 'base-character-prototype',
+    templateKey: 'modular-svg-avatar',
     templateVersion: 1,
     configurationVersion: 1,
-    settings: { skinColour: 'medium', hairColour: 'dark-brown', shirtColour: 'green' },
+    identity: testIdentity,
     revision: 1,
     createdAt: '2026-08-03T12:00:00.000Z',
     updatedAt: '2026-08-03T12:00:00.000Z',
   }
   const write = {
     name: 'Sam',
-    template_key: 'base-character-prototype',
+    template_key: 'modular-svg-avatar',
     template_version: 1,
     configuration_version: 1,
-    settings: { skin_colour: 'medium', hair_colour: 'dark-brown', shirt_colour: 'green' },
+    identity: testIdentity,
   }
+  const symbolId = '20000000-0000-4000-8000-000000000001'
+  const symbol: CharacterSymbolRecord = {
+    id: symbolId,
+    characterId: id,
+    name: 'Sam waves',
+    configurationVersion: 1,
+    action: testAction,
+    revision: 1,
+    createdAt: '2026-08-03T12:00:00.000Z',
+    updatedAt: '2026-08-03T12:00:00.000Z',
+  }
+  const symbolWrite = { name: 'Sam waves', configuration_version: 1, action: testAction }
 
   function setup(overrides: Partial<CharacterStore> = {}) {
     const store: CharacterStore = {
@@ -112,6 +125,11 @@ describe('Clerk-owned character API', () => {
       createCharacter: vi.fn<CharacterStore['createCharacter']>(async () => ({ kind: 'ok', character })),
       updateCharacter: vi.fn<CharacterStore['updateCharacter']>(async () => ({ kind: 'ok', character: { ...character, revision: 2 } })),
       deleteCharacter: vi.fn<CharacterStore['deleteCharacter']>(async () => ({ kind: 'deleted' })),
+      listCharacterSymbols: vi.fn<CharacterStore['listCharacterSymbols']>(async () => ({ kind: 'ok', symbols: [symbol] })),
+      findCharacterSymbol: vi.fn<CharacterStore['findCharacterSymbol']>(async () => ({ kind: 'ok', symbol })),
+      createCharacterSymbol: vi.fn<CharacterStore['createCharacterSymbol']>(async () => ({ kind: 'ok', symbol })),
+      updateCharacterSymbol: vi.fn<CharacterStore['updateCharacterSymbol']>(async () => ({ kind: 'ok', symbol: { ...symbol, revision: 2 } })),
+      deleteCharacterSymbol: vi.fn<CharacterStore['deleteCharacterSymbol']>(async () => ({ kind: 'deleted' })),
       deleteClerkUser: vi.fn(async () => undefined),
       ...overrides,
     }
@@ -123,6 +141,8 @@ describe('Clerk-owned character API', () => {
           : null,
       },
       characterId: () => id,
+      characterSymbolId: () => symbolId,
+      avatarArtKit: testAvatarArtKit,
       appNow: () => new Date('2026-08-03T12:00:00.000Z'),
     })
     return { characterApp, store }
@@ -146,7 +166,7 @@ describe('Clerk-owned character API', () => {
     expect(store.createCharacter).toHaveBeenCalledWith(
       'user_example', id, expect.objectContaining({
         name: 'Sam',
-        settings: { skinColour: 'medium', hairColour: 'dark-brown', shirtColour: 'green' },
+        identity: testIdentity,
       }), '2026-08-03T12:00:00.000Z',
     )
   })
@@ -162,7 +182,7 @@ describe('Clerk-owned character API', () => {
     expect((await unauthenticated.request('/api/app/characters', {
       method: 'POST',
       headers: { Authorization: 'Bearer valid', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...write, settings: { ...write.settings, shirt_colour: 'cyan' } }),
+      body: JSON.stringify({ ...write, identity: { ...testIdentity, colours: { ...testIdentity.colours, top: 'missing' } } }),
     })).status).toBe(422)
     expect((await unauthenticated.request('/api/app/characters/not-a-uuid', {
       headers: { Authorization: 'Bearer valid' },
@@ -179,6 +199,49 @@ describe('Clerk-owned character API', () => {
 
     const deleted = setup({ listCharacters: vi.fn<CharacterStore['listCharacters']>(async () => ({ kind: 'account_deleted' })) }).characterApp
     expect((await deleted.request('/api/app/characters', { headers: { Authorization: 'Bearer valid' } })).status).toBe(403)
+
+    const pendingArtApp = createApp({
+      characterStore: setup().store,
+      appSessionVerifier: { verify: async () => ({ userId: 'user_example' }) },
+    })
+    const pending = await pendingArtApp.request('/api/app/characters', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(write),
+    })
+    expect(pending.status).toBe(503)
+    await expect(pending.json()).resolves.toEqual({ error: 'avatar_art_unavailable' })
+  })
+
+  it('creates, lists, reads, updates, and deletes private character symbols', async () => {
+    const { characterApp, store } = setup()
+    const list = await characterApp.request(`/api/app/characters/${id}/symbols`, { headers: { Authorization: 'Bearer valid' } })
+    expect(list.status).toBe(200)
+    await expect(list.json()).resolves.toMatchObject({ symbols: [{ id: symbolId, character_id: id }] })
+    const created = await characterApp.request(`/api/app/characters/${id}/symbols`, {
+      method: 'POST', headers: { Authorization: 'Bearer valid', 'Content-Type': 'application/json' }, body: JSON.stringify(symbolWrite),
+    })
+    expect(created.status).toBe(201)
+    expect(created.headers.get('location')).toBe(`/api/app/character-symbols/${symbolId}`)
+    expect((await characterApp.request(`/api/app/character-symbols/${symbolId}`, { headers: { Authorization: 'Bearer valid' } })).status).toBe(200)
+    expect((await characterApp.request(`/api/app/character-symbols/${symbolId}`, {
+      method: 'PATCH', headers: { Authorization: 'Bearer valid', 'Content-Type': 'application/json' }, body: JSON.stringify({ ...symbolWrite, revision: 1 }),
+    })).status).toBe(200)
+    expect((await characterApp.request(`/api/app/character-symbols/${symbolId}`, {
+      method: 'DELETE', headers: { Authorization: 'Bearer valid' },
+    })).status).toBe(204)
+    expect(store.createCharacterSymbol).toHaveBeenCalledWith('user_example', id, symbolId, expect.objectContaining({ action: testAction }), expect.any(String))
+  })
+
+  it('returns stable symbol conflicts and blocked character deletion errors', async () => {
+    const conflict = setup({ updateCharacterSymbol: vi.fn<CharacterStore['updateCharacterSymbol']>(async () => ({ kind: 'conflict' })) }).characterApp
+    const conflictResponse = await conflict.request(`/api/app/character-symbols/${symbolId}`, {
+      method: 'PATCH', headers: { Authorization: 'Bearer valid', 'Content-Type': 'application/json' }, body: JSON.stringify({ ...symbolWrite, revision: 1 }),
+    })
+    expect(conflictResponse.status).toBe(409)
+    await expect(conflictResponse.json()).resolves.toEqual({ error: 'character_symbol_conflict' })
+    const blocked = setup({ deleteCharacter: vi.fn<CharacterStore['deleteCharacter']>(async () => ({ kind: 'has_symbols', symbolCount: 3 })) }).characterApp
+    const blockedResponse = await blocked.request(`/api/app/characters/${id}`, { method: 'DELETE', headers: { Authorization: 'Bearer valid' } })
+    expect(blockedResponse.status).toBe(409)
+    await expect(blockedResponse.json()).resolves.toEqual({ error: 'character_has_symbols', symbol_count: 3 })
   })
 
   it('reads, updates, and deletes only through the scoped store', async () => {
