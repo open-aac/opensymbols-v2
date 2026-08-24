@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url'
 import { serve } from '@hono/node-server'
+import { developmentArtKit } from '@opensymbols/avatar-svg'
 import { createApp } from './app.js'
 import { databaseUrlFromEnvironment } from './database-config.js'
 import { createPostgresPublicReadStore } from './public-read-store.js'
@@ -27,6 +28,7 @@ const app = createApp({
   appSessionVerifier: clerkSessionVerifierFromEnvironment(),
   clerkWebhookVerifier: clerkWebhookVerifierFromEnvironment(),
   characterStore: publicReadStore,
+  ...(process.env.AVATAR_ART_KIT === 'development' ? { avatarArtKit: developmentArtKit } : {}),
 })
 
 if (!Number.isInteger(port) || port < 1 || port > 65_535) {

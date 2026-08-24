@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node --env-file-if-exists=../../.env --import tsx --watch src/index.ts",
+    "dev": "cross-env AVATAR_ART_KIT=development node --env-file-if-exists=../../.env --import tsx --watch src/index.ts",
     "build": "rimraf dist && tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "data:generate": "tsx scripts/generate-search-data.ts",

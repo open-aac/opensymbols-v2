@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { compileSvgSource } from '../src/compiler.js'
+import { developmentArtKit } from '../src/development-art-kit.js'
 import { validateArtKit } from '../src/validation.js'
 import { fixtureArtKit } from './fixtures.js'
 
 describe('art-kit compilation and validation', () => {
+  it('accepts the complete development art kit', () => {
+    expect(validateArtKit(developmentArtKit)).toEqual([])
+  })
+
   it('accepts the isolated engineering fixture', () => {
     expect(validateArtKit(fixtureArtKit)).toEqual([])
   })
@@ -51,6 +56,38 @@ describe('art-kit compilation and validation', () => {
     expect(codes).toEqual(expect.arrayContaining([
       'invalid_colour_role', 'bounds_outside_viewbox', 'connector_outside_bounds',
       'invalid_connector_contract', 'unknown_action_part', 'unknown_action_variant_part',
+    ]))
+  })
+
+  it('rejects equipment compositions with missing source, replacement, or companion parts', () => {
+    const badKit = {
+      ...fixtureArtKit,
+      equipmentCompositions: [{
+        equipmentPartId: 'missing-equipment',
+        replacements: { body: { 'missing-source': 'missing-replacement' } },
+        placements: [{ partId: 'missing-companion' }],
+      }],
+    }
+    const codes = validateArtKit(badKit).map((issue) => issue.code)
+    expect(codes).toEqual(expect.arrayContaining([
+      'unknown_equipment_composition',
+      'unknown_equipment_replacement',
+      'unknown_equipment_placement',
+    ]))
+  })
+
+  it('rejects modular part compositions with missing triggers or parts', () => {
+    const badKit = {
+      ...fixtureArtKit,
+      partCompositions: [{
+        triggerPartId: 'missing-trigger',
+        placements: [{ partId: 'missing-arm' }],
+      }],
+    }
+    const codes = validateArtKit(badKit).map((issue) => issue.code)
+    expect(codes).toEqual(expect.arrayContaining([
+      'unknown_composition_trigger',
+      'unknown_composition_part',
     ]))
   })
 })

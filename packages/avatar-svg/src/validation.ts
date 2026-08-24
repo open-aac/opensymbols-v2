@@ -139,8 +139,47 @@ export function validateArtKit(manifest: AvatarArtKitManifest): ValidationIssue[
     }
   })
 
-  if (manifest.status === 'approved' && (manifest.parts.length === 0 || manifest.actions.length === 0)) {
-    issues.push({ code: 'approved_kit_incomplete', path: 'status', message: 'An approved art kit must contain parts and actions.' })
+  for (const [index, composition] of (manifest.equipmentCompositions ?? []).entries()) {
+    const path = `equipmentCompositions[${index}]`
+    if (!partIds.has(composition.equipmentPartId)) {
+      issues.push({ code: 'unknown_equipment_composition', path: `${path}.equipmentPartId`, message: `Unknown equipment part: ${composition.equipmentPartId}.` })
+    }
+    for (const [slot, replacements] of Object.entries(composition.replacements)) {
+      for (const [sourceId, replacementId] of Object.entries(replacements ?? {})) {
+        if (!partIds.has(sourceId) || !partIds.has(replacementId)) {
+          issues.push({ code: 'unknown_equipment_replacement', path: `${path}.replacements.${slot}`, message: `Unknown equipment replacement: ${sourceId} -> ${replacementId}.` })
+        }
+      }
+    }
+    for (const [placementIndex, placement] of (composition.placements ?? []).entries()) {
+      if (!partIds.has(placement.partId)) {
+        issues.push({ code: 'unknown_equipment_placement', path: `${path}.placements[${placementIndex}]`, message: `Unknown equipment placement: ${placement.partId}.` })
+      }
+    }
+    for (const [name, transform] of [['leftHandTransform', composition.leftHandTransform], ['rightHandTransform', composition.rightHandTransform]] as const) {
+      if (transform && unsafeValue.test(transform)) {
+        issues.push({ code: 'unsafe_transform', path: `${path}.${name}`, message: 'Transform contains an unsafe value.' })
+      }
+    }
+  }
+
+  for (const [index, composition] of (manifest.partCompositions ?? []).entries()) {
+    const path = `partCompositions[${index}]`
+    if (!partIds.has(composition.triggerPartId)) {
+      issues.push({ code: 'unknown_composition_trigger', path: `${path}.triggerPartId`, message: `Unknown composition trigger: ${composition.triggerPartId}.` })
+    }
+    for (const [placementIndex, placement] of composition.placements.entries()) {
+      if (!partIds.has(placement.partId)) {
+        issues.push({ code: 'unknown_composition_part', path: `${path}.placements[${placementIndex}]`, message: `Unknown composition part: ${placement.partId}.` })
+      }
+      if (placement.transform && unsafeValue.test(placement.transform)) {
+        issues.push({ code: 'unsafe_transform', path: `${path}.placements[${placementIndex}].transform`, message: 'Transform contains an unsafe value.' })
+      }
+    }
+  }
+
+  if (manifest.status !== 'pending' && (manifest.parts.length === 0 || manifest.actions.length === 0)) {
+    issues.push({ code: 'usable_kit_incomplete', path: 'status', message: 'A development or approved art kit must contain parts and actions.' })
   }
   return issues
 }

@@ -53,7 +53,7 @@ function sidedSelection(value: unknown): SidedPartSelection | null | undefined {
 }
 
 function parseIdentity(value: unknown, artKit: AvatarArtKitManifest): ParseResult<CharacterIdentityV1> {
-  if (artKit.status !== 'approved') return { kind: 'error', error: 'avatar_art_unavailable' }
+  if (artKit.status === 'pending') return { kind: 'error', error: 'avatar_art_unavailable' }
   const input = object(value)
   const selections = object(input?.selections)
   const colours = object(input?.colours)
@@ -127,7 +127,7 @@ function parseIdentity(value: unknown, artKit: AvatarArtKitManifest): ParseResul
 }
 
 function parseAction(value: unknown, artKit: AvatarArtKitManifest): ParseResult<CharacterActionV1> {
-  if (artKit.status !== 'approved') return { kind: 'error', error: 'avatar_art_unavailable' }
+  if (artKit.status === 'pending') return { kind: 'error', error: 'avatar_art_unavailable' }
   const input = object(value)
   if (!input || input.version !== 1 || typeof input.actionId !== 'string' || typeof input.expressionId !== 'string' ||
       typeof input.leftHandId !== 'string' || typeof input.rightHandId !== 'string' || typeof input.mirrored !== 'boolean' ||

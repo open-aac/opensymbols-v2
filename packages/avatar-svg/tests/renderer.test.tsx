@@ -1,12 +1,52 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { productionArtKit } from '../src/generated/production-art-kit.js'
+import { developmentArtKit, developmentDefaultIdentity, developmentNeutralAction } from '../src/development-art-kit.js'
 import { AvatarSvg } from '../src/react.js'
 import { resolveAvatar } from '../src/resolve.js'
 import { serializeAvatarSvg } from '../src/serialize.js'
 import { fixtureAction, fixtureArtKit, fixtureIdentity } from './fixtures.js'
 
 describe('avatar resolution and rendering', () => {
+  it('renders the development kit through the shared renderer contract', () => {
+    expect(resolveAvatar(developmentArtKit, developmentDefaultIdentity, developmentNeutralAction).kind).toBe('ready')
+    const markup = renderToStaticMarkup(
+      <AvatarSvg artKit={developmentArtKit} identity={developmentDefaultIdentity} action={developmentNeutralAction} title="Development avatar" />,
+    )
+    expect(markup).toContain('data-avatar-state="ready"')
+    expect(markup).toContain('body-average')
+    expect(markup).toContain('arm-left-upper-neutral')
+    expect(markup).toContain('arm-left-forearm-neutral')
+    expect(markup).toContain('hair-short-front')
+  })
+
+  it('replaces standing parts with a coherent seated wheelchair composition', () => {
+    const wheelchairIdentity = {
+      ...structuredClone(developmentDefaultIdentity),
+      selections: {
+        ...developmentDefaultIdentity.selections,
+        mobilityEquipment: 'equipment-wheelchair',
+      },
+    }
+    const result = resolveAvatar(developmentArtKit, wheelchairIdentity, developmentNeutralAction)
+    expect(result.kind).toBe('ready')
+    if (result.kind === 'ready') {
+      const parts = result.parts.map(({ part }) => part.id)
+      expect(parts).toContain('body-average-seated')
+      expect(parts).toContain('top-tshirt-seated')
+      expect(parts).toContain('bottom-trousers-seated')
+      expect(parts).toContain('footwear-trainers-seated')
+      expect(parts).toContain('equipment-wheelchair-front')
+      expect(parts).toContain('arm-left-upper-neutral')
+      expect(parts).toContain('arm-left-forearm-seated')
+      expect(parts).not.toContain('arm-left-forearm-neutral')
+      expect(parts).not.toContain('body-average')
+      expect(parts).not.toContain('bottom-trousers')
+      expect(result.parts.find(({ part }) => part.id === 'arm-left-forearm-seated')?.transform).toBe('translate(88 153) rotate(-22 20 10)')
+      expect(result.parts.find(({ part }) => part.id === 'hand-left-relaxed')?.transform).toBe('translate(19 0)')
+    }
+  })
+
   it('sorts resolved parts by the documented layer order', () => {
     const result = resolveAvatar(fixtureArtKit, fixtureIdentity, fixtureAction)
     expect(result.kind).toBe('ready')
@@ -36,6 +76,7 @@ describe('avatar resolution and rendering', () => {
     expect(result.kind).toBe('ready')
     if (result.kind === 'ready') {
       expect(result.svg).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg"/)
+      expect(result.svg).toContain('width="300" height="300"')
       expect(result.svg).toContain('#c88b6c')
       expect(result.svg).not.toContain('currentColor')
       expect(result.svg).not.toMatch(/diagnostic|connector-marker|editor-control/)

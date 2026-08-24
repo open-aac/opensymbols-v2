@@ -187,6 +187,19 @@ export interface AvatarActionDefinition {
   equipmentParts?: Readonly<Record<EquipmentId, PartId>>
 }
 
+export interface EquipmentCompositionDefinition {
+  equipmentPartId: PartId
+  replacements: Partial<Record<IdentitySlotId, Readonly<Record<PartId, PartId>>>>
+  placements?: readonly PartPlacement[]
+  leftHandTransform?: string
+  rightHandTransform?: string
+}
+
+export interface PartCompositionDefinition {
+  triggerPartId: PartId
+  placements: readonly PartPlacement[]
+}
+
 export interface PaletteDefinition {
   id: PaletteId
   label: string
@@ -196,10 +209,12 @@ export interface PaletteDefinition {
 
 export interface AvatarArtKitManifest {
   version: number
-  status: 'pending' | 'approved'
+  status: 'pending' | 'development' | 'approved'
   palettes: readonly PaletteDefinition[]
   parts: readonly SvgPartDefinition[]
   actions: readonly AvatarActionDefinition[]
+  equipmentCompositions?: readonly EquipmentCompositionDefinition[]
+  partCompositions?: readonly PartCompositionDefinition[]
 }
 
 export interface ValidationIssue {
