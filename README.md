@@ -136,6 +136,11 @@ timestamps; it does not copy Clerk profile data. Character configuration is
 stored as versioned JSON, while the rendered SVG remains a browser-generated
 preview.
 
+The proposed replacement for the single-artwork character prototype is
+specified in [the modular SVG avatar documentation](docs/avatar-system/README.md).
+The launch attribute matrix and illustrator contract are approval gates; the
+engineering laboratory artwork is not production artwork.
+
 After deploying an HTTPS beta environment, register
 `https://<beta-host>/api/webhooks/clerk` in the Clerk dashboard and subscribe
 only to `user.deleted`. Install the displayed signing secret as
