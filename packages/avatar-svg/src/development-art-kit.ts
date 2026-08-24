@@ -7,7 +7,7 @@ import type {
   SvgPartDefinition,
 } from './contracts.js'
 
-const outline = '#2b2422'
+const outline = '#302827'
 
 function path(d: string, fill = 'currentColor', strokeWidth = 5): CompiledSvgNode {
   return {
@@ -35,6 +35,13 @@ function line(x1: number, y1: number, x2: number, y2: number, width = 4): Compil
   }
 }
 
+function circle(cx: number, cy: number, r: number, fill = 'none', strokeWidth = 6): CompiledSvgNode {
+  return {
+    element: 'circle',
+    attributes: { cx, cy, r, fill, stroke: outline, 'stroke-width': strokeWidth },
+  }
+}
+
 function part(
   id: string,
   slot: IdentitySlotId | 'actionPart',
@@ -47,123 +54,177 @@ function part(
     slot,
     colourRole,
     layer,
-    bounds: { x: 8, y: 8, width: 284, height: 284 },
+    bounds: { x: 6, y: 6, width: 288, height: 288 },
     connectors: [],
     nodes,
   }
 }
 
-function body(id: string, shoulder: number, armWidth: number, hip: number, legWidth: number): SvgPartDefinition {
+function standingBody(id: string, shoulder: number, armWidth: number, hip: number): SvgPartDefinition {
   const leftShoulder = 150 - shoulder
   const rightShoulder = 150 + shoulder
   const leftHip = 150 - hip
   const rightHip = 150 + hip
   return part(id, 'body', 'skin', 'body-lower-clothing', [
-    path(`M${leftShoulder + 5} 112 C${leftShoulder - 8} 113 ${leftShoulder - 18} 126 ${leftShoulder - 20} 145 L${leftShoulder - 26} 207 C${leftShoulder - 27} 218 ${leftShoulder - 20} 225 ${leftShoulder - 12} 225 C${leftShoulder - 4} 225 ${leftShoulder + 1} 218 ${leftShoulder} 208 L${leftShoulder + armWidth} 148 C${leftShoulder + armWidth + 2} 131 ${leftShoulder + armWidth + 7} 120 ${leftShoulder + 5} 112 Z`),
-    path(`M${rightShoulder - 5} 112 C${rightShoulder + 8} 113 ${rightShoulder + 18} 126 ${rightShoulder + 20} 145 L${rightShoulder + 26} 207 C${rightShoulder + 27} 218 ${rightShoulder + 20} 225 ${rightShoulder + 12} 225 C${rightShoulder + 4} 225 ${rightShoulder - 1} 218 ${rightShoulder} 208 L${rightShoulder - armWidth} 148 C${rightShoulder - armWidth - 2} 131 ${rightShoulder - armWidth - 7} 120 ${rightShoulder - 5} 112 Z`),
-    path(`M${leftHip} 180 C${leftHip - 4} 201 ${leftHip - 5} 224 ${leftHip - 5} 248 L${leftHip - 6} 274 C${leftHip - 7} 284 ${leftHip + legWidth - 1} 288 ${leftHip + legWidth + 5} 282 C${leftHip + legWidth + 8} 278 ${leftHip + legWidth + 6} 264 ${leftHip + legWidth + 6} 251 L${leftHip + legWidth + 8} 187 Z`),
-    path(`M${rightHip} 180 C${rightHip + 4} 201 ${rightHip + 5} 224 ${rightHip + 5} 248 L${rightHip + 6} 274 C${rightHip + 7} 284 ${rightHip - legWidth + 1} 288 ${rightHip - legWidth - 5} 282 C${rightHip - legWidth - 8} 278 ${rightHip - legWidth - 6} 264 ${rightHip - legWidth - 6} 251 L${rightHip - legWidth - 8} 187 Z`),
-    path('M136 94 C136 108 132 118 126 124 L174 124 C168 118 164 108 164 94 Z'),
+    path(`M${leftShoulder + 8} 111 C${leftShoulder - 7} 113 ${leftShoulder - 16} 128 ${leftShoulder - 18} 146 L${leftShoulder - 23} 193 C${leftShoulder - 25} 204 ${leftShoulder - 19} 211 ${leftShoulder - 10} 211 C${leftShoulder - 1} 211 ${leftShoulder + 4} 205 ${leftShoulder + 4} 196 L${leftShoulder + armWidth} 151 C${leftShoulder + armWidth + 3} 134 ${leftShoulder + armWidth + 8} 119 ${leftShoulder + 8} 111 Z`),
+    path(`M${rightShoulder - 8} 111 C${rightShoulder + 7} 113 ${rightShoulder + 16} 128 ${rightShoulder + 18} 146 L${rightShoulder + 23} 193 C${rightShoulder + 25} 204 ${rightShoulder + 19} 211 ${rightShoulder + 10} 211 C${rightShoulder + 1} 211 ${rightShoulder - 4} 205 ${rightShoulder - 4} 196 L${rightShoulder - armWidth} 151 C${rightShoulder - armWidth - 3} 134 ${rightShoulder - armWidth - 8} 119 ${rightShoulder - 8} 111 Z`),
+    path(`M${leftHip - 8} 178 C${leftHip - 11} 202 ${leftHip - 10} 231 ${leftHip - 7} 263 L${leftHip + 17} 263 C${leftHip + 19} 231 ${leftHip + 18} 203 ${leftHip + 12} 180 Z`),
+    path(`M${rightHip + 8} 178 C${rightHip + 11} 202 ${rightHip + 10} 231 ${rightHip + 7} 263 L${rightHip - 17} 263 C${rightHip - 19} 231 ${rightHip - 18} 203 ${rightHip - 12} 180 Z`),
+    path('M137 94 C138 105 134 112 128 117 L172 117 C166 112 162 105 163 94 Z'),
+  ])
+}
+
+function seatedBody(id: string, shoulder: number, armWidth: number, hip: number): SvgPartDefinition {
+  const leftShoulder = 150 - shoulder
+  const rightShoulder = 150 + shoulder
+  const leftHip = 150 - hip
+  const rightHip = 150 + hip
+  return part(id, 'actionPart', 'skin', 'body-lower-clothing', [
+    path(`M${leftShoulder + 8} 111 C${leftShoulder - 7} 114 ${leftShoulder - 13} 130 ${leftShoulder - 12} 147 C${leftShoulder - 11} 163 ${leftShoulder + 2} 185 118 202 L132 190 C121 174 ${leftShoulder + armWidth} 153 ${leftShoulder + armWidth} 137 C${leftShoulder + armWidth} 123 ${leftShoulder + 15} 114 ${leftShoulder + 8} 111 Z`),
+    path(`M${rightShoulder - 8} 111 C${rightShoulder + 7} 114 ${rightShoulder + 13} 130 ${rightShoulder + 12} 147 C${rightShoulder + 11} 163 ${rightShoulder - 2} 185 182 202 L168 190 C179 174 ${rightShoulder - armWidth} 153 ${rightShoulder - armWidth} 137 C${rightShoulder - armWidth} 123 ${rightShoulder - 15} 114 ${rightShoulder - 8} 111 Z`),
+    path(`M${leftHip - 8} 178 C${leftHip - 18} 190 108 206 102 221 C111 229 119 234 128 236 C137 224 143 207 145 186 Z`),
+    path('M102 220 C105 234 114 248 123 264 L145 257 C139 239 130 225 120 215 Z'),
+    path(`M${rightHip + 8} 178 C${rightHip + 18} 190 192 206 198 221 C189 229 181 234 172 236 C163 224 157 207 155 186 Z`),
+    path('M198 220 C195 234 186 248 177 264 L155 257 C161 239 170 225 180 215 Z'),
+    path('M137 94 C138 105 134 112 128 117 L172 117 C166 112 162 105 163 94 Z'),
+  ])
+}
+
+function seatedTop(id: string, jumper: boolean): SvgPartDefinition {
+  return part(id, 'actionPart', 'top', 'upper-clothing', jumper ? [
+    path('M120 110 C132 106 138 104 140 103 C143 112 157 112 160 103 C172 106 181 111 188 118 L181 183 C163 190 137 190 119 183 L112 118 Z'),
+    path('M113 117 C103 128 103 151 111 169 L128 160 L128 119 Z'),
+    path('M187 117 C197 128 197 151 189 169 L172 160 L172 119 Z'),
+  ] : [
+    path('M121 111 C132 107 137 105 140 104 C143 112 157 112 160 104 C171 107 179 111 187 116 L180 151 L181 183 C163 190 137 190 119 183 L120 151 L113 116 Z'),
+    path('M114 116 C106 122 105 135 107 148 L126 148 L128 119 Z'),
+    path('M186 116 C194 122 195 135 193 148 L174 148 L172 119 Z'),
   ])
 }
 
 const parts: SvgPartDefinition[] = [
   part('equipment-wheelchair', 'mobilityEquipment', 'equipment', 'rear-equipment', [
-    path('M96 196 C72 204 58 228 64 252 C69 276 92 291 116 286 C138 281 152 259 148 236 C144 213 120 192 96 196 Z', 'none', 7),
-    path('M188 171 L207 229 L244 229', 'none', 7),
-    path('M204 229 C199 260 176 279 146 281', 'none', 7),
-    path('M191 171 L219 171', 'none', 7),
+    circle(100, 222, 57, 'none', 7),
+    circle(200, 222, 57, 'none', 7),
+    path('M112 121 L188 121 L190 206 C174 216 126 216 110 206 Z'),
+    path('M110 184 L190 184', 'none', 7),
+  ]),
+  part('equipment-wheelchair-front', 'actionPart', 'equipment', 'foreground-equipment', [
+    circle(100, 222, 8, 'currentColor', 4),
+    circle(200, 222, 8, 'currentColor', 4),
   ]),
   part('hair-long-rear', 'rearHair', 'hair', 'rear-hair', [
-    path('M103 51 C111 25 137 18 158 21 C190 24 204 49 200 88 L205 139 C192 151 176 153 164 143 L137 143 C119 154 98 148 93 134 L101 89 C96 75 97 62 103 51 Z'),
+    path('M106 57 C112 30 131 19 153 20 C181 20 197 40 195 70 L202 132 C194 143 181 147 169 139 L132 139 C119 147 104 142 98 132 L105 72 C102 67 103 62 106 57 Z'),
   ]),
   part('hair-coily-rear', 'rearHair', 'hair', 'rear-hair', [
-    path('M99 78 C87 65 96 47 109 44 C106 28 126 20 138 28 C148 14 169 21 172 33 C190 27 204 43 198 58 C213 68 204 88 191 91 L192 129 C181 143 167 145 156 136 L126 140 C111 140 100 130 102 116 Z'),
+    path('M103 80 C90 72 94 55 105 50 C99 36 112 24 125 29 C131 16 147 16 155 27 C166 17 181 25 181 38 C195 35 204 49 198 61 C210 71 202 86 190 88 L195 126 C184 140 169 143 157 135 L126 139 C111 139 101 128 103 114 Z'),
   ]),
-  body('body-slim', 37, 17, 19, 17),
-  body('body-average', 43, 20, 23, 20),
-  body('body-broad', 49, 23, 28, 23),
+  standingBody('body-slim', 38, 17, 20),
+  standingBody('body-average', 43, 20, 24),
+  standingBody('body-broad', 49, 23, 29),
+  seatedBody('body-slim-seated', 38, 17, 20),
+  seatedBody('body-average-seated', 43, 20, 24),
+  seatedBody('body-broad-seated', 49, 23, 29),
   part('bottom-trousers', 'bottom', 'bottom', 'body-lower-clothing', [
-    path('M111 174 C124 168 176 168 189 174 L187 219 L163 219 L158 184 L142 184 L137 219 L113 219 Z'),
-    path('M113 212 L137 212 L134 260 L109 260 Z'),
-    path('M163 212 L187 212 L191 260 L166 260 Z'),
+    path('M111 174 C126 169 174 169 189 174 L186 263 L156 263 L153 190 L147 190 L144 263 L114 263 Z'),
   ]),
   part('bottom-shorts', 'bottom', 'bottom', 'body-lower-clothing', [
-    path('M110 174 C126 168 174 168 190 174 L187 218 L159 218 L150 191 L141 218 L113 218 Z'),
+    path('M111 174 C126 169 174 169 189 174 L186 213 L158 213 L150 190 L142 213 L114 213 Z'),
   ]),
   part('bottom-skirt', 'bottom', 'bottom', 'body-lower-clothing', [
-    path('M118 171 C132 168 168 168 182 171 L198 226 C172 235 128 235 102 226 Z'),
+    path('M119 171 C133 168 167 168 181 171 L195 224 C171 231 129 231 105 224 Z'),
+  ]),
+  part('bottom-trousers-seated', 'actionPart', 'bottom', 'body-lower-clothing', [
+    path('M111 174 C126 169 174 169 189 174 C189 189 194 207 200 220 L177 236 C164 218 156 202 150 190 C144 202 136 218 123 236 L100 220 C106 207 111 189 111 174 Z'),
+    path('M100 219 C106 237 114 250 123 265 L147 257 C141 239 131 224 121 214 Z'),
+    path('M200 219 C194 237 186 250 177 265 L153 257 C159 239 169 224 179 214 Z'),
+  ]),
+  part('bottom-shorts-seated', 'actionPart', 'bottom', 'body-lower-clothing', [
+    path('M111 174 C126 169 174 169 189 174 C190 187 194 200 198 211 L177 223 C165 210 157 198 150 188 C143 198 135 210 123 223 L102 211 C106 200 110 187 111 174 Z'),
+  ]),
+  part('bottom-skirt-seated', 'actionPart', 'bottom', 'body-lower-clothing', [
+    path('M116 171 C132 168 168 168 184 171 L207 218 C177 232 123 232 93 218 Z'),
   ]),
   part('top-tshirt', 'top', 'top', 'upper-clothing', [
-    path('M121 111 C131 106 136 105 139 104 C141 113 159 113 161 104 C171 107 179 110 187 115 L179 151 L181 183 C163 190 137 190 119 183 L121 151 L113 115 Z'),
-    path('M114 115 C105 121 103 136 105 151 L124 151 L128 119 Z'),
-    path('M186 115 C195 121 197 136 195 151 L176 151 L172 119 Z'),
+    path('M121 111 C132 107 137 105 140 104 C143 112 157 112 160 104 C171 107 179 111 187 116 L180 151 L181 183 C163 190 137 190 119 183 L120 151 L113 116 Z'),
+    path('M114 116 C106 122 104 136 106 150 L126 150 L128 119 Z'),
+    path('M186 116 C194 122 196 136 194 150 L174 150 L172 119 Z'),
   ]),
   part('top-jumper', 'top', 'top', 'upper-clothing', [
-    path('M120 110 C131 106 137 104 140 103 C142 113 158 113 160 103 C173 107 181 110 189 117 L181 183 C162 190 138 190 119 183 L111 117 Z'),
-    path('M112 116 C101 126 100 158 103 190 L124 190 L128 119 Z'),
-    path('M188 116 C199 126 200 158 197 190 L176 190 L172 119 Z'),
+    path('M120 110 C132 106 138 104 140 103 C143 112 157 112 160 103 C172 106 181 111 188 118 L181 183 C163 190 137 190 119 183 L112 118 Z'),
+    path('M113 117 C103 128 102 157 105 188 L126 188 L128 119 Z'),
+    path('M187 117 C197 128 198 157 195 188 L174 188 L172 119 Z'),
   ]),
+  seatedTop('top-tshirt-seated', false),
+  seatedTop('top-jumper-seated', true),
   part('footwear-trainers', 'footwear', 'footwear', 'front-limbs-hands', [
-    path('M104 257 L136 257 L138 278 C132 287 97 287 92 280 C92 269 97 262 104 257 Z'),
-    path('M164 257 L196 257 C203 262 208 269 208 280 C203 287 168 287 162 278 Z'),
+    path('M111 255 L144 255 L145 276 C137 284 105 284 99 278 C100 267 104 260 111 255 Z'),
+    path('M156 255 L189 255 C196 260 200 267 201 278 C195 284 163 284 155 276 Z'),
   ]),
   part('footwear-boots', 'footwear', 'footwear', 'front-limbs-hands', [
-    path('M102 246 L137 246 L138 279 C128 287 98 287 91 280 C92 268 96 257 102 246 Z'),
-    path('M163 246 L198 246 C204 257 208 268 209 280 C202 287 172 287 162 279 Z'),
+    path('M108 244 L144 244 L145 277 C136 285 104 285 98 278 C99 264 103 253 108 244 Z'),
+    path('M156 244 L192 244 C197 253 201 264 202 278 C196 285 164 285 155 277 Z'),
+  ]),
+  part('footwear-trainers-seated', 'actionPart', 'footwear', 'front-limbs-hands', [
+    path('M116 251 L145 251 L147 270 C140 278 110 278 104 272 C105 262 110 256 116 251 Z'),
+    path('M155 251 L184 251 C190 256 195 262 196 272 C190 278 160 278 153 270 Z'),
+  ]),
+  part('footwear-boots-seated', 'actionPart', 'footwear', 'front-limbs-hands', [
+    path('M113 241 L145 241 L147 271 C139 279 109 279 103 272 C104 259 108 249 113 241 Z'),
+    path('M155 241 L187 241 C192 249 196 259 197 272 C191 279 161 279 153 271 Z'),
   ]),
   part('head-round', 'head', 'skin', 'head-ears', [
-    path('M108 67 C108 35 126 21 151 21 C177 21 194 37 193 69 C193 99 176 118 151 119 C126 119 108 98 108 67 Z'),
-    path('M109 68 C98 62 94 76 101 86 C104 90 109 89 112 85 Z'),
-    path('M192 68 C203 62 207 76 200 86 C197 90 192 89 189 85 Z'),
+    path('M108 67 C108 37 126 22 150 22 C175 22 192 38 192 68 C192 98 175 116 150 117 C126 116 108 97 108 67 Z'),
+    path('M109 69 C99 64 96 76 102 85 C105 89 109 88 112 84 Z'),
+    path('M191 69 C201 64 204 76 198 85 C195 89 191 88 188 84 Z'),
   ]),
   part('head-oval', 'head', 'skin', 'head-ears', [
-    path('M113 62 C114 34 130 20 151 20 C174 20 190 36 189 66 C188 99 174 119 151 121 C127 119 112 98 113 62 Z'),
-    path('M114 68 C103 63 100 77 106 87 C109 91 113 89 116 85 Z'),
-    path('M188 68 C199 63 202 77 196 87 C193 91 189 89 186 85 Z'),
+    path('M113 64 C113 35 129 20 150 20 C173 20 189 36 188 67 C187 99 173 118 150 120 C127 118 112 98 113 64 Z'),
+    path('M114 70 C104 65 101 77 107 86 C110 90 114 89 117 85 Z'),
+    path('M187 70 C197 65 200 77 194 86 C191 90 187 89 184 85 Z'),
   ]),
   part('face-soft', 'face', 'detail', 'face-facial-hair', [
-    path('M150 68 C146 76 146 82 151 84', 'none', 3),
+    path('M148 67 C144 75 145 82 151 84', 'none', 3),
   ]),
   part('face-defined', 'face', 'detail', 'face-facial-hair', [
-    path('M147 66 C143 75 144 82 152 85 C155 85 157 83 158 81', 'none', 3),
+    path('M146 65 C142 74 143 82 151 85 C155 85 158 82 159 79', 'none', 3),
   ]),
   part('expression-neutral', 'actionPart', 'detail', 'face-facial-hair', [
-    line(132, 62, 140, 62, 4), line(162, 62, 170, 62, 4),
-    path('M139 96 C146 99 154 99 161 96', 'none', 3),
+    path('M130 63 C134 60 139 60 143 63', 'none', 4),
+    path('M158 63 C162 60 167 60 171 63', 'none', 4),
+    path('M138 96 C145 100 155 100 162 96', 'none', 3),
   ]),
   part('hand-left-relaxed', 'actionPart', 'skin', 'front-limbs-hands', [
-    path('M101 207 C92 206 88 214 91 221 C95 229 108 230 113 222 C117 214 111 208 101 207 Z'),
+    path('M96 198 C88 199 85 207 89 214 C93 221 104 222 109 215 C113 208 107 199 96 198 Z'),
   ]),
   part('hand-right-relaxed', 'actionPart', 'skin', 'front-limbs-hands', [
-    path('M199 207 C208 206 212 214 209 221 C205 229 192 230 187 222 C183 214 189 208 199 207 Z'),
+    path('M204 198 C212 199 215 207 211 214 C207 221 196 222 191 215 C187 208 193 199 204 198 Z'),
   ]),
   part('hair-short-front', 'frontHair', 'hair', 'front-hair-accessories', [
-    path('M107 67 C103 46 114 27 135 22 C160 15 185 27 193 49 C197 60 194 72 190 79 C183 62 174 51 164 47 C151 55 134 52 121 47 C115 55 111 62 107 67 Z'),
+    path('M107 67 C103 48 112 31 129 24 C149 15 174 22 187 39 C196 51 196 67 190 78 C183 61 174 51 164 47 C151 54 135 53 121 47 C115 54 111 61 107 67 Z'),
   ]),
   part('hair-long-front', 'frontHair', 'hair', 'front-hair-accessories', [
-    path('M105 70 C101 45 116 25 139 20 C166 14 190 30 195 53 C197 63 194 74 190 81 C183 62 174 51 164 47 C150 55 135 53 120 47 C115 56 111 64 105 70 Z'),
-    path('M105 67 C99 91 98 115 102 137 C110 143 117 140 121 133 L120 48 Z'),
-    path('M193 65 C200 89 201 113 197 137 C189 143 182 140 178 133 L180 48 Z'),
+    path('M106 69 C102 46 115 28 136 22 C162 15 187 29 194 51 C197 62 194 74 190 81 C183 62 174 51 164 47 C150 54 135 53 120 47 C115 55 111 63 106 69 Z'),
+    path('M107 64 C101 86 101 112 105 132 C111 137 117 135 120 128 L120 48 Z'),
+    path('M191 63 C198 85 198 111 195 132 C189 137 183 135 180 128 L180 48 Z'),
   ]),
   part('hair-coily-front', 'frontHair', 'hair', 'front-hair-accessories', [
-    path('M102 72 C92 65 96 51 106 48 C101 36 113 25 125 30 C130 17 145 16 153 26 C164 15 179 23 179 35 C193 32 202 45 196 57 C208 65 200 81 189 82 C181 64 173 54 163 49 C150 55 135 53 122 48 C115 54 109 62 102 72 Z'),
+    path('M103 72 C93 65 97 52 107 48 C102 37 113 26 125 30 C131 18 145 17 153 27 C164 17 178 24 179 36 C192 33 201 46 196 58 C207 66 200 80 189 82 C181 64 173 54 163 49 C150 55 136 53 122 48 C115 54 109 62 103 72 Z'),
   ]),
   part('glasses-round', 'glasses', 'detail', 'front-hair-accessories', [
-    { element: 'circle', attributes: { cx: 136, cy: 66, r: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': 4 } },
-    { element: 'circle', attributes: { cx: 166, cy: 66, r: 12, fill: 'none', stroke: 'currentColor', 'stroke-width': 4 } },
-    line(148, 66, 154, 66, 4), line(123, 64, 110, 60, 4), line(179, 64, 191, 60, 4),
+    circle(136, 67, 12, 'none', 4), circle(165, 67, 12, 'none', 4),
+    line(148, 67, 153, 67, 4), line(124, 65, 111, 61, 4), line(177, 65, 190, 61, 4),
   ]),
   part('glasses-rectangular', 'glasses', 'detail', 'front-hair-accessories', [
-    path('M121 55 L148 56 L147 77 L122 76 Z', 'none', 4),
-    path('M154 56 L181 55 L180 76 L155 77 Z', 'none', 4),
-    line(148, 64, 154, 64, 4), line(121, 60, 110, 58, 4), line(181, 60, 192, 58, 4),
+    path('M121 56 L148 57 L147 77 L122 76 Z', 'none', 4),
+    path('M153 57 L180 56 L179 76 L154 77 Z', 'none', 4),
+    line(148, 65, 153, 65, 4), line(121, 61, 110, 59, 4), line(180, 61, 191, 59, 4),
   ]),
   part('hearing-left', 'hearingDevice', 'equipment', 'front-hair-accessories', [
-    path('M103 68 C94 72 95 91 105 94 L111 85 C105 82 105 76 110 73', 'none', 5),
+    path('M104 69 C96 72 96 89 105 93 L111 85 C106 82 106 76 111 73', 'none', 5),
   ]),
   part('hearing-right', 'hearingDevice', 'equipment', 'front-hair-accessories', [
-    path('M197 68 C206 72 205 91 195 94 L189 85 C195 82 195 76 190 73', 'none', 5),
+    path('M196 69 C204 72 204 89 195 93 L189 85 C194 82 194 76 189 73', 'none', 5),
   ]),
 ]
 
@@ -195,6 +256,32 @@ export const developmentArtKit: AvatarArtKitManifest = {
     expressionParts: { neutral: 'expression-neutral' },
     leftHandParts: { relaxed: 'hand-left-relaxed' },
     rightHandParts: { relaxed: 'hand-right-relaxed' },
+  }],
+  equipmentCompositions: [{
+    equipmentPartId: 'equipment-wheelchair',
+    replacements: {
+      body: {
+        'body-slim': 'body-slim-seated',
+        'body-average': 'body-average-seated',
+        'body-broad': 'body-broad-seated',
+      },
+      top: {
+        'top-tshirt': 'top-tshirt-seated',
+        'top-jumper': 'top-jumper-seated',
+      },
+      bottom: {
+        'bottom-trousers': 'bottom-trousers-seated',
+        'bottom-shorts': 'bottom-shorts-seated',
+        'bottom-skirt': 'bottom-skirt-seated',
+      },
+      footwear: {
+        'footwear-trainers': 'footwear-trainers-seated',
+        'footwear-boots': 'footwear-boots-seated',
+      },
+    },
+    placements: [{ partId: 'equipment-wheelchair-front' }],
+    leftHandTransform: 'translate(21 -8)',
+    rightHandTransform: 'translate(-21 -8)',
   }],
 }
 

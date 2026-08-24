@@ -157,6 +157,7 @@ describe('account dashboard', () => {
     expect(screen.getByText('Development art')).toBeVisible()
     expect(screen.getByText(/not approved artwork/i)).toBeVisible()
     expect(screen.getByRole('button', { name: 'Save character' })).toBeDisabled()
+    expect(screen.queryByText('Enter a character name between 1 and 80 characters.')).not.toBeInTheDocument()
 
     let nameInput = screen.getByRole('textbox', { name: 'Character name' })
     expect(nameInput).toHaveFocus()

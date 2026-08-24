@@ -18,6 +18,29 @@ describe('avatar resolution and rendering', () => {
     expect(markup).toContain('hair-short-front')
   })
 
+  it('replaces standing parts with a coherent seated wheelchair composition', () => {
+    const wheelchairIdentity = {
+      ...structuredClone(developmentDefaultIdentity),
+      selections: {
+        ...developmentDefaultIdentity.selections,
+        mobilityEquipment: 'equipment-wheelchair',
+      },
+    }
+    const result = resolveAvatar(developmentArtKit, wheelchairIdentity, developmentNeutralAction)
+    expect(result.kind).toBe('ready')
+    if (result.kind === 'ready') {
+      const parts = result.parts.map(({ part }) => part.id)
+      expect(parts).toContain('body-average-seated')
+      expect(parts).toContain('top-tshirt-seated')
+      expect(parts).toContain('bottom-trousers-seated')
+      expect(parts).toContain('footwear-trainers-seated')
+      expect(parts).toContain('equipment-wheelchair-front')
+      expect(parts).not.toContain('body-average')
+      expect(parts).not.toContain('bottom-trousers')
+      expect(result.parts.find(({ part }) => part.id === 'hand-left-relaxed')?.transform).toBe('translate(21 -8)')
+    }
+  })
+
   it('sorts resolved parts by the documented layer order', () => {
     const result = resolveAvatar(fixtureArtKit, fixtureIdentity, fixtureAction)
     expect(result.kind).toBe('ready')

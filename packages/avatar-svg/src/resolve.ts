@@ -46,25 +46,32 @@ export function resolveAvatar(
   if (!actionDefinition) return { kind: 'unavailable', code: 'action_missing', message: `Action ${action.actionId} is unavailable.` }
 
   const partMap = new Map(manifest.parts.map((part) => [part.id, part]))
+  const selectedEquipment = identity.selections.mobilityEquipment
+  const equipmentComposition = selectedEquipment
+    ? manifest.equipmentCompositions?.find((candidate) => candidate.equipmentPartId === selectedEquipment)
+    : undefined
   const candidates: Array<{ id: PartId; transform?: string }> = []
   for (const slot of IDENTITY_SLOTS) {
     const id = identity.selections[slot]
-    if (id) candidates.push({ id, transform: actionDefinition.identityTransforms?.[slot] })
+    if (!id) continue
+    const replacement = equipmentComposition?.replacements[slot]?.[id]
+    candidates.push({ id: replacement ?? id, transform: actionDefinition.identityTransforms?.[slot] })
   }
   for (const selection of [identity.sidedSelections.hearingDevice, identity.sidedSelections.arm, identity.sidedSelections.leg]) {
     if (selection?.left) candidates.push({ id: selection.left })
     if (selection?.right) candidates.push({ id: selection.right })
   }
   candidates.push(...actionDefinition.placements.map((placement) => ({ id: placement.partId, ...(placement.transform ? { transform: placement.transform } : {}) })))
+  candidates.push(...(equipmentComposition?.placements ?? []).map((placement) => ({ id: placement.partId, ...(placement.transform ? { transform: placement.transform } : {}) })))
 
-  const variants = [
-    actionDefinition.expressionParts[action.expressionId],
-    actionDefinition.leftHandParts[action.leftHandId],
-    actionDefinition.rightHandParts[action.rightHandId],
-    action.propId ? actionDefinition.propParts?.[action.propId] : undefined,
-    action.equipmentOverrideId ? actionDefinition.equipmentParts?.[action.equipmentOverrideId] : undefined,
+  const variants: Array<{ id: string | undefined; transform?: string }> = [
+    { id: actionDefinition.expressionParts[action.expressionId] },
+    { id: actionDefinition.leftHandParts[action.leftHandId], transform: equipmentComposition?.leftHandTransform },
+    { id: actionDefinition.rightHandParts[action.rightHandId], transform: equipmentComposition?.rightHandTransform },
+    { id: action.propId ? actionDefinition.propParts?.[action.propId] : undefined },
+    { id: action.equipmentOverrideId ? actionDefinition.equipmentParts?.[action.equipmentOverrideId] : undefined },
   ]
-  for (const id of variants) if (id) candidates.push({ id })
+  for (const variant of variants) if (variant.id) candidates.push({ id: variant.id, ...(variant.transform ? { transform: variant.transform } : {}) })
 
   const missingVariants = [
     actionDefinition.expressionParts[action.expressionId] ? undefined : action.expressionId,

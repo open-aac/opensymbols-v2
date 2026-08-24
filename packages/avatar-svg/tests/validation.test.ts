@@ -58,4 +58,21 @@ describe('art-kit compilation and validation', () => {
       'invalid_connector_contract', 'unknown_action_part', 'unknown_action_variant_part',
     ]))
   })
+
+  it('rejects equipment compositions with missing source, replacement, or companion parts', () => {
+    const badKit = {
+      ...fixtureArtKit,
+      equipmentCompositions: [{
+        equipmentPartId: 'missing-equipment',
+        replacements: { body: { 'missing-source': 'missing-replacement' } },
+        placements: [{ partId: 'missing-companion' }],
+      }],
+    }
+    const codes = validateArtKit(badKit).map((issue) => issue.code)
+    expect(codes).toEqual(expect.arrayContaining([
+      'unknown_equipment_composition',
+      'unknown_equipment_replacement',
+      'unknown_equipment_placement',
+    ]))
+  })
 })

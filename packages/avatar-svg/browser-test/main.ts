@@ -30,3 +30,14 @@ if (preview.kind === 'ready') {
   image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(preview.svg)}`
   document.body.append(image)
 }
+
+const wheelchairPreview = serializeAvatarSvg(developmentArtKit, {
+  ...structuredClone(developmentDefaultIdentity),
+  selections: { ...developmentDefaultIdentity.selections, mobilityEquipment: 'equipment-wheelchair' },
+}, developmentNeutralAction)
+if (wheelchairPreview.kind === 'ready') {
+  const image = document.createElement('img')
+  image.alt = 'Development wheelchair avatar preview'
+  image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(wheelchairPreview.svg)}`
+  document.body.append(image)
+}

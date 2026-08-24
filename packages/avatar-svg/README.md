@@ -6,6 +6,8 @@ The checked-in production registry is intentionally `pending` and contains no vi
 
 `developmentArtKit` contains original engineering drawings for the local character creator. It tests identity choices, rendering, and storage. It is not illustrator-approved art and must not replace `productionArtKit`. The local server opts into it with `AVATAR_ART_KIT=development`; the production server does not.
 
+Equipment that changes posture uses an art-kit composition. For example, the development wheelchair composition replaces the selected standing body, clothing, and footwear with matching seated variants while keeping the saved identity choices unchanged. This prevents equipment from being drawn as an overlay on an incompatible standing character.
+
 The package is split into entry points so the server can import `@opensymbols/avatar-svg/contracts` without loading React or browser code.
 
 ## Entry points

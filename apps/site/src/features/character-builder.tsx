@@ -315,6 +315,7 @@ export function CharacterEditorPage() {
   const [name, setName] = useState('')
   const [nameDraft, setNameDraft] = useState('')
   const [editingName, setEditingName] = useState(!characterId)
+  const [nameValidationRequested, setNameValidationRequested] = useState(false)
   const [identity, setIdentity] = useState<CharacterIdentityV1>(cloneDefaultIdentity)
   const [history, setHistory] = useState<CharacterIdentityV1[]>([])
   const [savedCharacter, setSavedCharacter] = useState<SavedCharacter>()
@@ -336,6 +337,7 @@ export function CharacterEditorPage() {
       setName(character.name)
       setNameDraft(character.name)
       setEditingName(false)
+      setNameValidationRequested(false)
       setIdentity(character.identity)
       setHistory([])
     } catch (caught) { setLoadError(caught as Error) }
@@ -422,13 +424,17 @@ export function CharacterEditorPage() {
   }
 
   function finishNameEditing() {
-    if (!nameDraftValid) return
+    if (!nameDraftValid) {
+      setNameValidationRequested(true)
+      return
+    }
     const next = nameDraft.trim()
     setName(next)
     setNameDraft(next)
     setSaveStatus(undefined)
     restoreNameFocus.current = true
     setEditingName(false)
+    setNameValidationRequested(false)
   }
 
   function handleNameKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -525,9 +531,9 @@ export function CharacterEditorPage() {
           {editingName ? (
             <div className="character-editor__name-editor">
               <label className="visually-hidden" htmlFor="character-name">Character name</label>
-              <input ref={nameInputRef} className="field__control character-editor__name-input" id="character-name" required maxLength={80} value={nameDraft} aria-invalid={!nameDraftValid} aria-describedby={!nameDraftValid ? 'character-name-error' : undefined} disabled={loading} onChange={(event) => { setNameDraft(event.target.value); setSaveStatus(undefined) }} onKeyDown={handleNameKeyDown} />
-              <div className="character-editor__name-actions"><Button variant="primary" disabled={!nameDraftValid || loading} onClick={finishNameEditing}>Done</Button><Button disabled={loading} onClick={() => { setNameDraft(name); restoreNameFocus.current = true; setEditingName(false) }}>Cancel</Button></div>
-              {!nameDraftValid && <span className="field__error" id="character-name-error">Enter a character name between 1 and 80 characters.</span>}
+              <input ref={nameInputRef} className="field__control character-editor__name-input" id="character-name" required maxLength={80} placeholder="Name this character" value={nameDraft} aria-invalid={nameValidationRequested && !nameDraftValid ? true : undefined} aria-describedby={nameValidationRequested && !nameDraftValid ? 'character-name-error' : undefined} disabled={loading} onBlur={() => setNameValidationRequested(true)} onChange={(event) => { setNameDraft(event.target.value); setNameValidationRequested(false); setSaveStatus(undefined) }} onKeyDown={handleNameKeyDown} />
+              <div className="character-editor__name-actions"><Button variant="primary" disabled={!nameDraftValid || loading} onClick={finishNameEditing}>Done</Button><Button disabled={loading} onClick={() => { setNameDraft(name); setNameValidationRequested(false); restoreNameFocus.current = true; setEditingName(false) }}>Cancel</Button></div>
+              {nameValidationRequested && !nameDraftValid && <span className="field__error" id="character-name-error">Enter a character name between 1 and 80 characters.</span>}
             </div>
           ) : (
             <div className="character-editor__name-display"><p>{name || 'Name your character'}</p><Button id="character-name-edit" disabled={loading} onClick={() => { setNameDraft(name); setSaveStatus(undefined); setEditingName(true) }}><Pencil aria-hidden="true" focusable="false" size={18} /> Edit name</Button></div>
