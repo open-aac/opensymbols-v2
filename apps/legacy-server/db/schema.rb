@@ -28,11 +28,22 @@ ActiveRecord::Schema.define(version: 20260803160000) do
     t.string   "template_key",                          null: false
     t.integer  "template_version",                      null: false
     t.integer  "configuration_version",                 null: false
-    t.jsonb    "settings",              default: {},    null: false
+    t.jsonb    "identity",              default: {},    null: false
     t.integer  "revision",              default: 1,     null: false
     t.datetime "created_at",                            null: false
     t.datetime "updated_at",                            null: false
     t.index ["clerk_user_id", "updated_at", "id"], name: "index_characters_on_owner_and_updated_at", using: :btree
+  end
+
+  create_table "character_symbols", id: :uuid, default: nil, force: :cascade do |t|
+    t.uuid     "character_id",                          null: false
+    t.string   "name",                  limit: 80,      null: false
+    t.integer  "configuration_version",                 null: false
+    t.jsonb    "action",                default: {},    null: false
+    t.integer  "revision",              default: 1,     null: false
+    t.datetime "created_at",                            null: false
+    t.datetime "updated_at",                            null: false
+    t.index ["character_id", "updated_at", "id"], name: "index_character_symbols_on_character_and_updated_at", using: :btree
   end
 
   create_table "external_sources", force: :cascade do |t|
@@ -88,5 +99,6 @@ ActiveRecord::Schema.define(version: 20260803160000) do
   end
 
   add_foreign_key "characters", "app_users", column: "clerk_user_id", primary_key: "clerk_user_id", on_delete: :cascade
+  add_foreign_key "character_symbols", "characters", on_delete: :restrict
 
 end

@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
+import { productionArtKit, type AvatarArtKitManifest } from '@opensymbols/avatar-svg'
 import { Hono } from 'hono'
 import { serveStatic } from '@hono/node-server/serve-static'
 import {
@@ -27,8 +28,10 @@ import type { ClerkWebhookVerifier } from './clerk-webhook.js'
 import type { CharacterStore } from './character-store.js'
 import {
   characterResponse,
+  characterSymbolResponse,
   isCharacterId,
-  parseCharacterRevision,
+  parseCharacterSymbolWrite,
+  parseRevision,
   parseCharacterWrite,
 } from './character-api.js'
 import type { DiscoveryCatalog } from './discovery-catalog.js'
@@ -53,6 +56,8 @@ export interface AppOptions {
   characterStore?: CharacterStore
   appNow?: () => Date
   characterId?: () => string
+  characterSymbolId?: () => string
+  avatarArtKit?: AvatarArtKitManifest
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -68,6 +73,8 @@ export function createApp(options: AppOptions = {}) {
   const symbolRequestStore = options.symbolRequestStore ?? options.publicDiscoveryStore
   const appNow = options.appNow ?? (() => new Date())
   const characterId = options.characterId ?? randomUUID
+  const characterSymbolId = options.characterSymbolId ?? randomUUID
+  const avatarArtKit = options.avatarArtKit ?? productionArtKit
   const privateResponse = (context: { header(name: string, value: string): void }) => {
     context.header('Cache-Control', 'private, no-store')
   }
@@ -118,13 +125,13 @@ export function createApp(options: AppOptions = {}) {
     if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
     let input: unknown
     try { input = await context.req.json() } catch { return context.json({ error: 'invalid_character' as const }, 422) }
-    const character = parseCharacterWrite(input)
-    if (!character) return context.json({ error: 'invalid_character' as const }, 422)
+    const parsed = parseCharacterWrite(input, avatarArtKit)
+    if (parsed.kind === 'error') return context.json({ error: parsed.error }, parsed.error === 'avatar_art_unavailable' ? 503 : 422)
     try {
       const result = await options.characterStore.createCharacter(
         session.userId,
         characterId(),
-        character,
+        parsed.value,
         appNow().toISOString(),
       )
       if (result.kind === 'account_deleted') return context.json({ error: 'account_deleted' as const }, 403)
@@ -164,14 +171,15 @@ export function createApp(options: AppOptions = {}) {
     if (!isCharacterId(id)) return context.json({ error: 'not_found' as const }, 404)
     let input: unknown
     try { input = await context.req.json() } catch { return context.json({ error: 'invalid_character' as const }, 422) }
-    const character = parseCharacterWrite(input)
-    const revision = parseCharacterRevision(input)
-    if (!character || revision === null) return context.json({ error: 'invalid_character' as const }, 422)
+    const parsed = parseCharacterWrite(input, avatarArtKit)
+    const revision = parseRevision(input)
+    if (parsed.kind === 'error') return context.json({ error: parsed.error }, parsed.error === 'avatar_art_unavailable' ? 503 : 422)
+    if (revision === null) return context.json({ error: 'invalid_character' as const }, 422)
     try {
       const result = await options.characterStore.updateCharacter(
         session.userId,
         id,
-        character,
+        parsed.value,
         revision,
         appNow().toISOString(),
       )
@@ -194,6 +202,115 @@ export function createApp(options: AppOptions = {}) {
     if (!isCharacterId(id)) return context.json({ error: 'not_found' as const }, 404)
     try {
       const result = await options.characterStore.deleteCharacter(session.userId, id, appNow().toISOString())
+      if (result.kind === 'account_deleted') return context.json({ error: 'account_deleted' as const }, 403)
+      if (result.kind === 'not_found') return context.json({ error: 'not_found' as const }, 404)
+      if (result.kind === 'has_symbols') return context.json({ error: 'character_has_symbols' as const, symbol_count: result.symbolCount }, 409)
+      return context.body(null, 204)
+    } catch {
+      return context.json({ error: 'database_unavailable' as const }, 503)
+    }
+  })
+
+  app.get('/api/app/characters/:id/symbols', async (context) => {
+    privateResponse(context)
+    if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
+    const session = await appSession(context.req.raw)
+    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
+    const characterId = context.req.param('id')
+    if (!isCharacterId(characterId)) return context.json({ error: 'not_found' as const }, 404)
+    try {
+      const result = await options.characterStore.listCharacterSymbols(session.userId, characterId, appNow().toISOString())
+      if (result.kind === 'account_deleted') return context.json({ error: 'account_deleted' as const }, 403)
+      if (result.kind === 'not_found') return context.json({ error: 'not_found' as const }, 404)
+      return context.json({ symbols: result.symbols.map(characterSymbolResponse) })
+    } catch {
+      return context.json({ error: 'database_unavailable' as const }, 503)
+    }
+  })
+
+  app.post('/api/app/characters/:id/symbols', async (context) => {
+    privateResponse(context)
+    if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
+    const session = await appSession(context.req.raw)
+    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
+    const characterId = context.req.param('id')
+    if (!isCharacterId(characterId)) return context.json({ error: 'not_found' as const }, 404)
+    let input: unknown
+    try { input = await context.req.json() } catch { return context.json({ error: 'invalid_character_symbol' as const }, 422) }
+    const parsed = parseCharacterSymbolWrite(input, avatarArtKit)
+    if (parsed.kind === 'error') return context.json({ error: parsed.error }, parsed.error === 'avatar_art_unavailable' ? 503 : 422)
+    try {
+      const result = await options.characterStore.createCharacterSymbol(
+        session.userId,
+        characterId,
+        characterSymbolId(),
+        parsed.value,
+        appNow().toISOString(),
+      )
+      if (result.kind === 'account_deleted') return context.json({ error: 'account_deleted' as const }, 403)
+      if (result.kind === 'not_found') return context.json({ error: 'not_found' as const }, 404)
+      context.header('Location', `/api/app/character-symbols/${result.symbol.id}`)
+      return context.json({ symbol: characterSymbolResponse(result.symbol) }, 201)
+    } catch {
+      return context.json({ error: 'database_unavailable' as const }, 503)
+    }
+  })
+
+  app.get('/api/app/character-symbols/:id', async (context) => {
+    privateResponse(context)
+    if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
+    const session = await appSession(context.req.raw)
+    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
+    const id = context.req.param('id')
+    if (!isCharacterId(id)) return context.json({ error: 'not_found' as const }, 404)
+    try {
+      const result = await options.characterStore.findCharacterSymbol(session.userId, id, appNow().toISOString())
+      if (result.kind === 'account_deleted') return context.json({ error: 'account_deleted' as const }, 403)
+      if (result.kind === 'not_found') return context.json({ error: 'not_found' as const }, 404)
+      return context.json({ symbol: characterSymbolResponse(result.symbol) })
+    } catch {
+      return context.json({ error: 'database_unavailable' as const }, 503)
+    }
+  })
+
+  app.patch('/api/app/character-symbols/:id', async (context) => {
+    privateResponse(context)
+    if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
+    const session = await appSession(context.req.raw)
+    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
+    const id = context.req.param('id')
+    if (!isCharacterId(id)) return context.json({ error: 'not_found' as const }, 404)
+    let input: unknown
+    try { input = await context.req.json() } catch { return context.json({ error: 'invalid_character_symbol' as const }, 422) }
+    const parsed = parseCharacterSymbolWrite(input, avatarArtKit)
+    const revision = parseRevision(input)
+    if (parsed.kind === 'error') return context.json({ error: parsed.error }, parsed.error === 'avatar_art_unavailable' ? 503 : 422)
+    if (revision === null) return context.json({ error: 'invalid_character_symbol' as const }, 422)
+    try {
+      const result = await options.characterStore.updateCharacterSymbol(session.userId, id, parsed.value, revision, appNow().toISOString())
+      if (result.kind === 'account_deleted') return context.json({ error: 'account_deleted' as const }, 403)
+      if (result.kind === 'not_found') return context.json({ error: 'not_found' as const }, 404)
+      if (result.kind === 'conflict') return context.json({ error: 'character_symbol_conflict' as const }, 409)
+      return context.json({ symbol: characterSymbolResponse(result.symbol) })
+    } catch {
+      return context.json({ error: 'database_unavailable' as const }, 503)
+    }
+  })
+
+  app.delete('/api/app/character-symbols/:id', async (context) => {
+    privateResponse(context)
+    if (!options.appSessionVerifier) return context.json({ error: 'authentication_unconfigured' as const }, 503)
+    const session = await appSession(context.req.raw)
+    if (!session) return context.json({ error: 'authentication_required' as const }, 401)
+    if (!options.characterStore) return context.json({ error: 'database_unavailable' as const }, 503)
+    const id = context.req.param('id')
+    if (!isCharacterId(id)) return context.json({ error: 'not_found' as const }, 404)
+    try {
+      const result = await options.characterStore.deleteCharacterSymbol(session.userId, id, appNow().toISOString())
       if (result.kind === 'account_deleted') return context.json({ error: 'account_deleted' as const }, 403)
       if (result.kind === 'not_found') return context.json({ error: 'not_found' as const }, 404)
       return context.body(null, 204)

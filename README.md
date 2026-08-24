@@ -73,6 +73,11 @@ from `http://localhost:5173/demo-symbols` by default; override
 source token is `local-development-shared-secret`. These values are for local
 development only, and the seed refuses to run in production.
 
+The modular avatar schema is greenfield. To replace disposable local prototype
+character records with the current schema, run `pnpm avatar:db:reset`. This
+drops and recreates the named local development database, so do not use it when
+you need to preserve local data.
+
 Public discovery searches run directly against decoded symbol records in
 PostgreSQL. Hono preserves the React search contract without requiring
 Elasticsearch or another search service.
@@ -132,9 +137,18 @@ does not copy Clerk tokens into local storage, session storage, URLs, or logs.
 
 Saved characters are private PostgreSQL records scoped to the verified Clerk
 user ID. The local `app_users` table stores only that external ID and lifecycle
-timestamps; it does not copy Clerk profile data. Character configuration is
-stored as versioned JSON, while the rendered SVG remains a browser-generated
-preview.
+timestamps; it does not copy Clerk profile data. Each character stores one
+versioned modular identity. `character_symbols` stores many independently
+versioned actions linked to that identity; neither table stores generated SVG
+or PNG data. Character routes live under `/api/app/characters`, nested symbol
+creation and listing use `/api/app/characters/:id/symbols`, and individual
+symbol routes use `/api/app/character-symbols/:id`. Character deletion is
+blocked while linked symbols exist.
+
+The production art registry is intentionally pending until illustrator
+approval. Character and symbol writes return `avatar_art_unavailable` until an
+approved registry is compiled; unsupported semantic selections are never
+silently replaced.
 
 The proposed replacement for the single-artwork character prototype is
 specified in [the modular SVG avatar documentation](docs/avatar-system/README.md).
