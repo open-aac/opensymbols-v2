@@ -34,6 +34,6 @@ export function serializeAvatarSvg(
   const viewBox = `${AVATAR_VIEW_BOX.x} ${AVATAR_VIEW_BOX.y} ${AVATAR_VIEW_BOX.width} ${AVATAR_VIEW_BOX.height}`
   return {
     kind: 'ready',
-    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" role="img" aria-label="${escapeAttribute(title)}"><title>${escapeAttribute(title)}</title>${mirrored}</svg>`,
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="${viewBox}" role="img" aria-label="${escapeAttribute(title)}"><title>${escapeAttribute(title)}</title>${mirrored}</svg>`,
   }
 }

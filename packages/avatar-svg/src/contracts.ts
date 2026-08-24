@@ -196,7 +196,7 @@ export interface PaletteDefinition {
 
 export interface AvatarArtKitManifest {
   version: number
-  status: 'pending' | 'approved'
+  status: 'pending' | 'development' | 'approved'
   palettes: readonly PaletteDefinition[]
   parts: readonly SvgPartDefinition[]
   actions: readonly AvatarActionDefinition[]

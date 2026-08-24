@@ -1,12 +1,23 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { productionArtKit } from '../src/generated/production-art-kit.js'
+import { developmentArtKit, developmentDefaultIdentity, developmentNeutralAction } from '../src/development-art-kit.js'
 import { AvatarSvg } from '../src/react.js'
 import { resolveAvatar } from '../src/resolve.js'
 import { serializeAvatarSvg } from '../src/serialize.js'
 import { fixtureAction, fixtureArtKit, fixtureIdentity } from './fixtures.js'
 
 describe('avatar resolution and rendering', () => {
+  it('renders the development kit through the shared renderer contract', () => {
+    expect(resolveAvatar(developmentArtKit, developmentDefaultIdentity, developmentNeutralAction).kind).toBe('ready')
+    const markup = renderToStaticMarkup(
+      <AvatarSvg artKit={developmentArtKit} identity={developmentDefaultIdentity} action={developmentNeutralAction} title="Development avatar" />,
+    )
+    expect(markup).toContain('data-avatar-state="ready"')
+    expect(markup).toContain('body-average')
+    expect(markup).toContain('hair-short-front')
+  })
+
   it('sorts resolved parts by the documented layer order', () => {
     const result = resolveAvatar(fixtureArtKit, fixtureIdentity, fixtureAction)
     expect(result.kind).toBe('ready')
@@ -36,6 +47,7 @@ describe('avatar resolution and rendering', () => {
     expect(result.kind).toBe('ready')
     if (result.kind === 'ready') {
       expect(result.svg).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg"/)
+      expect(result.svg).toContain('width="300" height="300"')
       expect(result.svg).toContain('#c88b6c')
       expect(result.svg).not.toContain('currentColor')
       expect(result.svg).not.toMatch(/diagnostic|connector-marker|editor-control/)

@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { compileSvgSource } from '../src/compiler.js'
+import { developmentArtKit } from '../src/development-art-kit.js'
 import { validateArtKit } from '../src/validation.js'
 import { fixtureArtKit } from './fixtures.js'
 
 describe('art-kit compilation and validation', () => {
+  it('accepts the complete development art kit', () => {
+    expect(validateArtKit(developmentArtKit)).toEqual([])
+  })
+
   it('accepts the isolated engineering fixture', () => {
     expect(validateArtKit(fixtureArtKit)).toEqual([])
   })

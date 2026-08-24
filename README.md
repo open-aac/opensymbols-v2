@@ -150,6 +150,12 @@ approval. Character and symbol writes return `avatar_art_unavailable` until an
 approved registry is compiled; unsupported semantic selections are never
 silently replaced.
 
+Local `pnpm dev` runs the character creator with a separate development art
+kit. It exercises modular choices and the real save API, but every creator and
+library screen labels the drawings as unapproved engineering art. The server
+enables that registry only when `AVATAR_ART_KIT=development`; its normal build
+still defaults to the empty production registry.
+
 The proposed replacement for the single-artwork character prototype is
 specified in [the modular SVG avatar documentation](docs/avatar-system/README.md).
 The launch attribute matrix and illustrator contract are approval gates; the

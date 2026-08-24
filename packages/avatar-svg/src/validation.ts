@@ -139,8 +139,8 @@ export function validateArtKit(manifest: AvatarArtKitManifest): ValidationIssue[
     }
   })
 
-  if (manifest.status === 'approved' && (manifest.parts.length === 0 || manifest.actions.length === 0)) {
-    issues.push({ code: 'approved_kit_incomplete', path: 'status', message: 'An approved art kit must contain parts and actions.' })
+  if (manifest.status !== 'pending' && (manifest.parts.length === 0 || manifest.actions.length === 0)) {
+    issues.push({ code: 'usable_kit_incomplete', path: 'status', message: 'A development or approved art kit must contain parts and actions.' })
   }
   return issues
 }

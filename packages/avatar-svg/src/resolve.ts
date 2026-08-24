@@ -36,7 +36,7 @@ export function resolveAvatar(
   identity: CharacterIdentityV1,
   action: CharacterActionV1,
 ): AvatarResolution {
-  if (manifest.status !== 'approved') {
+  if (manifest.status === 'pending') {
     return { kind: 'unavailable', code: 'art_kit_pending', message: 'The production avatar art kit has not been approved yet.' }
   }
   if (identity.artKitVersion !== manifest.version) {
