@@ -63,6 +63,10 @@ export function resolveAvatar(
   }
   candidates.push(...actionDefinition.placements.map((placement) => ({ id: placement.partId, ...(placement.transform ? { transform: placement.transform } : {}) })))
   candidates.push(...(equipmentComposition?.placements ?? []).map((placement) => ({ id: placement.partId, ...(placement.transform ? { transform: placement.transform } : {}) })))
+  for (const candidate of [...candidates]) {
+    const composition = manifest.partCompositions?.find(({ triggerPartId }) => triggerPartId === candidate.id)
+    if (composition) candidates.push(...composition.placements.map((placement) => ({ id: placement.partId, ...(placement.transform ? { transform: placement.transform } : {}) })))
+  }
 
   const variants: Array<{ id: string | undefined; transform?: string }> = [
     { id: actionDefinition.expressionParts[action.expressionId] },

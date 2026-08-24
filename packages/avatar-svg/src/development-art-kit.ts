@@ -42,12 +42,17 @@ function circle(cx: number, cy: number, r: number, fill = 'none', strokeWidth = 
   }
 }
 
+function connector(id: string, connectorClass: string, x: number, y: number, seamWidth = 18): SvgPartDefinition['connectors'][number] {
+  return { id, connectorClass, x, y, directionDegrees: 0, seamWidth, overlap: 4 }
+}
+
 function part(
   id: string,
   slot: IdentitySlotId | 'actionPart',
   colourRole: SvgPartDefinition['colourRole'],
   layer: SvgPartDefinition['layer'],
   nodes: readonly CompiledSvgNode[],
+  connectors: SvgPartDefinition['connectors'] = [],
 ): SvgPartDefinition {
   return {
     id,
@@ -55,37 +60,25 @@ function part(
     colourRole,
     layer,
     bounds: { x: 6, y: 6, width: 288, height: 288 },
-    connectors: [],
+    connectors,
     nodes,
   }
 }
 
-function standingBody(id: string, shoulder: number, armWidth: number, hip: number): SvgPartDefinition {
-  const leftShoulder = 150 - shoulder
-  const rightShoulder = 150 + shoulder
+function standingBody(id: string, hip: number): SvgPartDefinition {
   const leftHip = 150 - hip
   const rightHip = 150 + hip
   return part(id, 'body', 'skin', 'body-lower-clothing', [
-    path(`M${leftShoulder + armWidth} 116 C${leftShoulder + 14} 112 ${leftShoulder + 5} 111 ${leftShoulder} 116 C${leftShoulder - 7} 124 ${leftShoulder - 8} 139 ${leftShoulder - 7} 147 L${leftShoulder - 13} 158 C${leftShoulder - 11} 165 ${leftShoulder - 3} 168 ${leftShoulder + 4} 164 C${leftShoulder + 10} 160 ${leftShoulder + 11} 152 ${leftShoulder + 8} 146 C${leftShoulder + 10} 134 ${leftShoulder + 14} 123 ${leftShoulder + armWidth} 116 Z`),
-    path(`M${leftShoulder - 13} 154 C${leftShoulder - 18} 167 ${leftShoulder - 20} 184 ${leftShoulder - 20} 196 C${leftShoulder - 20} 204 ${leftShoulder - 13} 209 ${leftShoulder - 6} 207 C${leftShoulder} 204 ${leftShoulder + 1} 198 ${leftShoulder} 192 L${leftShoulder + 4} 161 C${leftShoulder} 154 ${leftShoulder - 7} 151 ${leftShoulder - 13} 154 Z`),
-    path(`M${rightShoulder - armWidth} 116 C${rightShoulder - 14} 112 ${rightShoulder - 5} 111 ${rightShoulder} 116 C${rightShoulder + 7} 124 ${rightShoulder + 8} 139 ${rightShoulder + 7} 147 L${rightShoulder + 13} 158 C${rightShoulder + 11} 165 ${rightShoulder + 3} 168 ${rightShoulder - 4} 164 C${rightShoulder - 10} 160 ${rightShoulder - 11} 152 ${rightShoulder - 8} 146 C${rightShoulder - 10} 134 ${rightShoulder - 14} 123 ${rightShoulder - armWidth} 116 Z`),
-    path(`M${rightShoulder + 13} 154 C${rightShoulder + 18} 167 ${rightShoulder + 20} 184 ${rightShoulder + 20} 196 C${rightShoulder + 20} 204 ${rightShoulder + 13} 209 ${rightShoulder + 6} 207 C${rightShoulder} 204 ${rightShoulder - 1} 198 ${rightShoulder} 192 L${rightShoulder - 4} 161 C${rightShoulder} 154 ${rightShoulder + 7} 151 ${rightShoulder + 13} 154 Z`),
     path(`M${leftHip - 8} 178 C${leftHip - 11} 202 ${leftHip - 10} 231 ${leftHip - 7} 263 L${leftHip + 17} 263 C${leftHip + 19} 231 ${leftHip + 18} 203 ${leftHip + 12} 180 Z`),
     path(`M${rightHip + 8} 178 C${rightHip + 11} 202 ${rightHip + 10} 231 ${rightHip + 7} 263 L${rightHip - 17} 263 C${rightHip - 19} 231 ${rightHip - 18} 203 ${rightHip - 12} 180 Z`),
     path('M137 94 C138 105 134 112 128 117 L172 117 C166 112 162 105 163 94 Z'),
   ])
 }
 
-function seatedBody(id: string, shoulder: number, armWidth: number, hip: number): SvgPartDefinition {
-  const leftShoulder = 150 - shoulder
-  const rightShoulder = 150 + shoulder
+function seatedBody(id: string, hip: number): SvgPartDefinition {
   const leftHip = 150 - hip
   const rightHip = 150 + hip
   return part(id, 'actionPart', 'skin', 'body-lower-clothing', [
-    path(`M${leftShoulder + armWidth} 116 C${leftShoulder + 14} 112 ${leftShoulder + 5} 111 ${leftShoulder} 116 C${leftShoulder - 7} 124 ${leftShoulder - 8} 139 ${leftShoulder - 7} 147 L${leftShoulder - 13} 158 C${leftShoulder - 11} 165 ${leftShoulder - 3} 168 ${leftShoulder + 4} 164 C${leftShoulder + 10} 160 ${leftShoulder + 11} 152 ${leftShoulder + 8} 146 C${leftShoulder + 10} 134 ${leftShoulder + 14} 123 ${leftShoulder + armWidth} 116 Z`),
-    path(`M${leftShoulder - 13} 154 C${leftShoulder - 11} 168 ${leftShoulder + 1} 184 120 199 C125 203 131 198 129 191 C119 174 ${leftShoulder + 7} 159 ${leftShoulder + 4} 158 C${leftShoulder} 153 ${leftShoulder - 7} 151 ${leftShoulder - 13} 154 Z`),
-    path(`M${rightShoulder - armWidth} 116 C${rightShoulder - 14} 112 ${rightShoulder - 5} 111 ${rightShoulder} 116 C${rightShoulder + 7} 124 ${rightShoulder + 8} 139 ${rightShoulder + 7} 147 L${rightShoulder + 13} 158 C${rightShoulder + 11} 165 ${rightShoulder + 3} 168 ${rightShoulder - 4} 164 C${rightShoulder - 10} 160 ${rightShoulder - 11} 152 ${rightShoulder - 8} 146 C${rightShoulder - 10} 134 ${rightShoulder - 14} 123 ${rightShoulder - armWidth} 116 Z`),
-    path(`M${rightShoulder + 13} 154 C${rightShoulder + 11} 168 ${rightShoulder - 1} 184 180 199 C175 203 169 198 171 191 C181 174 ${rightShoulder - 7} 159 ${rightShoulder - 4} 158 C${rightShoulder} 153 ${rightShoulder + 7} 151 ${rightShoulder + 13} 154 Z`),
     path(`M${leftHip - 8} 178 C${leftHip - 18} 190 108 206 102 221 C111 229 119 234 128 236 C137 224 143 207 145 186 Z`),
     path('M102 220 C105 234 114 248 123 264 L145 257 C139 239 130 225 120 215 Z'),
     path(`M${rightHip + 8} 178 C${rightHip + 18} 190 192 206 198 221 C189 229 181 234 172 236 C163 224 157 207 155 186 Z`),
@@ -106,6 +99,32 @@ function seatedTop(id: string, jumper: boolean): SvgPartDefinition {
   ])
 }
 
+const standingArmParts: SvgPartDefinition[] = [
+  part('arm-left-upper-neutral', 'actionPart', 'skin', 'rear-limbs', [
+    path('M127 116 C121 112 112 111 107 116 C100 124 99 139 100 147 L94 158 C96 165 104 168 111 164 C117 160 118 152 115 146 C117 134 121 123 127 116 Z'),
+  ], [connector('left-shoulder', 'shoulder-v1', 119, 119), connector('left-elbow', 'elbow-v1', 102, 158)]),
+  part('arm-left-forearm-neutral', 'actionPart', 'skin', 'rear-limbs', [
+    path('M94 154 C89 167 87 184 87 196 C87 204 94 209 101 207 C107 204 108 198 107 192 L111 161 C107 154 100 151 94 154 Z'),
+  ], [connector('left-elbow', 'elbow-v1', 102, 158), connector('left-wrist', 'wrist-v1', 97, 201, 14)]),
+  part('arm-right-upper-neutral', 'actionPart', 'skin', 'rear-limbs', [
+    path('M173 116 C179 112 188 111 193 116 C200 124 201 139 200 147 L206 158 C204 165 196 168 189 164 C183 160 182 152 185 146 C183 134 179 123 173 116 Z'),
+  ], [connector('right-shoulder', 'shoulder-v1', 181, 119), connector('right-elbow', 'elbow-v1', 198, 158)]),
+  part('arm-right-forearm-neutral', 'actionPart', 'skin', 'rear-limbs', [
+    path('M206 154 C211 167 213 184 213 196 C213 204 206 209 199 207 C193 204 192 198 193 192 L189 161 C193 154 200 151 206 154 Z'),
+  ], [connector('right-elbow', 'elbow-v1', 198, 158), connector('right-wrist', 'wrist-v1', 203, 201, 14)]),
+]
+
+const seatedArmParts: SvgPartDefinition[] = [
+  standingArmParts[0]!,
+  part('arm-left-forearm-seated', 'actionPart', 'skin', 'rear-limbs', [
+    path('M94 154 C96 168 108 184 120 199 C125 203 131 198 129 191 C119 174 114 162 111 158 C107 153 100 151 94 154 Z'),
+  ], [connector('left-elbow', 'elbow-v1', 102, 158), connector('left-wrist', 'wrist-v1', 122, 196, 14)]),
+  standingArmParts[2]!,
+  part('arm-right-forearm-seated', 'actionPart', 'skin', 'rear-limbs', [
+    path('M206 154 C204 168 192 184 180 199 C175 203 169 198 171 191 C181 174 186 162 189 158 C193 153 200 151 206 154 Z'),
+  ], [connector('right-elbow', 'elbow-v1', 198, 158), connector('right-wrist', 'wrist-v1', 178, 196, 14)]),
+]
+
 const parts: SvgPartDefinition[] = [
   part('equipment-wheelchair', 'mobilityEquipment', 'equipment', 'rear-equipment', [
     circle(100, 222, 57, 'none', 7),
@@ -123,12 +142,14 @@ const parts: SvgPartDefinition[] = [
   part('hair-coily-rear', 'rearHair', 'hair', 'rear-hair', [
     path('M103 80 C90 72 94 55 105 50 C99 36 112 24 125 29 C131 16 147 16 155 27 C166 17 181 25 181 38 C195 35 204 49 198 61 C210 71 202 86 190 88 L195 126 C184 140 169 143 157 135 L126 139 C111 139 101 128 103 114 Z'),
   ]),
-  standingBody('body-slim', 38, 17, 20),
-  standingBody('body-average', 43, 20, 24),
-  standingBody('body-broad', 49, 23, 29),
-  seatedBody('body-slim-seated', 38, 17, 20),
-  seatedBody('body-average-seated', 43, 20, 24),
-  seatedBody('body-broad-seated', 49, 23, 29),
+  ...standingArmParts,
+  ...seatedArmParts.filter((partDefinition) => !standingArmParts.includes(partDefinition)),
+  standingBody('body-slim', 20),
+  standingBody('body-average', 24),
+  standingBody('body-broad', 29),
+  seatedBody('body-slim-seated', 20),
+  seatedBody('body-average-seated', 24),
+  seatedBody('body-broad-seated', 29),
   part('bottom-trousers', 'bottom', 'bottom', 'body-lower-clothing', [
     path('M111 174 C126 169 174 169 189 174 L186 263 L156 263 L153 190 L147 190 L144 263 L114 263 Z'),
   ]),
@@ -200,10 +221,10 @@ const parts: SvgPartDefinition[] = [
   ]),
   part('hand-left-relaxed', 'actionPart', 'skin', 'front-limbs-hands', [
     path('M96 198 C88 199 85 207 89 214 C93 221 104 222 109 215 C113 208 107 199 96 198 Z'),
-  ]),
+  ], [connector('left-wrist', 'wrist-v1', 97, 201, 14)]),
   part('hand-right-relaxed', 'actionPart', 'skin', 'front-limbs-hands', [
     path('M204 198 C212 199 215 207 211 214 C207 221 196 222 191 215 C187 208 193 199 204 198 Z'),
-  ]),
+  ], [connector('right-wrist', 'wrist-v1', 203, 201, 14)]),
   part('hair-short-front', 'frontHair', 'hair', 'front-hair-accessories', [
     path('M107 67 C103 48 112 31 129 24 C149 15 174 22 187 39 C196 51 196 67 190 78 C183 61 174 51 164 47 C151 54 135 53 121 47 C115 54 111 61 107 67 Z'),
   ]),
@@ -261,6 +282,26 @@ export const developmentArtKit: AvatarArtKitManifest = {
     leftHandParts: { relaxed: 'hand-left-relaxed' },
     rightHandParts: { relaxed: 'hand-right-relaxed' },
   }],
+  partCompositions: [
+    ...['body-slim', 'body-average', 'body-broad'].map((triggerPartId) => ({
+      triggerPartId,
+      placements: [
+        { partId: 'arm-left-upper-neutral' },
+        { partId: 'arm-left-forearm-neutral' },
+        { partId: 'arm-right-upper-neutral' },
+        { partId: 'arm-right-forearm-neutral' },
+      ],
+    })),
+    ...['body-slim-seated', 'body-average-seated', 'body-broad-seated'].map((triggerPartId) => ({
+      triggerPartId,
+      placements: [
+        { partId: 'arm-left-upper-neutral' },
+        { partId: 'arm-left-forearm-seated' },
+        { partId: 'arm-right-upper-neutral' },
+        { partId: 'arm-right-forearm-seated' },
+      ],
+    })),
+  ],
   equipmentCompositions: [{
     equipmentPartId: 'equipment-wheelchair',
     replacements: {
@@ -284,8 +325,8 @@ export const developmentArtKit: AvatarArtKitManifest = {
       },
     },
     placements: [{ partId: 'equipment-wheelchair-front' }],
-    leftHandTransform: 'translate(21 -8)',
-    rightHandTransform: 'translate(-21 -8)',
+    leftHandTransform: 'translate(25 -5)',
+    rightHandTransform: 'translate(-25 -5)',
   }],
 }
 

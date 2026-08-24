@@ -195,6 +195,11 @@ export interface EquipmentCompositionDefinition {
   rightHandTransform?: string
 }
 
+export interface PartCompositionDefinition {
+  triggerPartId: PartId
+  placements: readonly PartPlacement[]
+}
+
 export interface PaletteDefinition {
   id: PaletteId
   label: string
@@ -209,6 +214,7 @@ export interface AvatarArtKitManifest {
   parts: readonly SvgPartDefinition[]
   actions: readonly AvatarActionDefinition[]
   equipmentCompositions?: readonly EquipmentCompositionDefinition[]
+  partCompositions?: readonly PartCompositionDefinition[]
 }
 
 export interface ValidationIssue {

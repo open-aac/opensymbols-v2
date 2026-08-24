@@ -163,6 +163,21 @@ export function validateArtKit(manifest: AvatarArtKitManifest): ValidationIssue[
     }
   }
 
+  for (const [index, composition] of (manifest.partCompositions ?? []).entries()) {
+    const path = `partCompositions[${index}]`
+    if (!partIds.has(composition.triggerPartId)) {
+      issues.push({ code: 'unknown_composition_trigger', path: `${path}.triggerPartId`, message: `Unknown composition trigger: ${composition.triggerPartId}.` })
+    }
+    for (const [placementIndex, placement] of composition.placements.entries()) {
+      if (!partIds.has(placement.partId)) {
+        issues.push({ code: 'unknown_composition_part', path: `${path}.placements[${placementIndex}]`, message: `Unknown composition part: ${placement.partId}.` })
+      }
+      if (placement.transform && unsafeValue.test(placement.transform)) {
+        issues.push({ code: 'unsafe_transform', path: `${path}.placements[${placementIndex}].transform`, message: 'Transform contains an unsafe value.' })
+      }
+    }
+  }
+
   if (manifest.status !== 'pending' && (manifest.parts.length === 0 || manifest.actions.length === 0)) {
     issues.push({ code: 'usable_kit_incomplete', path: 'status', message: 'A development or approved art kit must contain parts and actions.' })
   }

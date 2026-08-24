@@ -15,6 +15,8 @@ describe('avatar resolution and rendering', () => {
     )
     expect(markup).toContain('data-avatar-state="ready"')
     expect(markup).toContain('body-average')
+    expect(markup).toContain('arm-left-upper-neutral')
+    expect(markup).toContain('arm-left-forearm-neutral')
     expect(markup).toContain('hair-short-front')
   })
 
@@ -35,9 +37,12 @@ describe('avatar resolution and rendering', () => {
       expect(parts).toContain('bottom-trousers-seated')
       expect(parts).toContain('footwear-trainers-seated')
       expect(parts).toContain('equipment-wheelchair-front')
+      expect(parts).toContain('arm-left-upper-neutral')
+      expect(parts).toContain('arm-left-forearm-seated')
+      expect(parts).not.toContain('arm-left-forearm-neutral')
       expect(parts).not.toContain('body-average')
       expect(parts).not.toContain('bottom-trousers')
-      expect(result.parts.find(({ part }) => part.id === 'hand-left-relaxed')?.transform).toBe('translate(21 -8)')
+      expect(result.parts.find(({ part }) => part.id === 'hand-left-relaxed')?.transform).toBe('translate(25 -5)')
     }
   })
 

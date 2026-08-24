@@ -75,4 +75,19 @@ describe('art-kit compilation and validation', () => {
       'unknown_equipment_placement',
     ]))
   })
+
+  it('rejects modular part compositions with missing triggers or parts', () => {
+    const badKit = {
+      ...fixtureArtKit,
+      partCompositions: [{
+        triggerPartId: 'missing-trigger',
+        placements: [{ partId: 'missing-arm' }],
+      }],
+    }
+    const codes = validateArtKit(badKit).map((issue) => issue.code)
+    expect(codes).toEqual(expect.arrayContaining([
+      'unknown_composition_trigger',
+      'unknown_composition_part',
+    ]))
+  })
 })
