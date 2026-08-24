@@ -15,6 +15,7 @@
     "test:database": "cross-env RUN_DATABASE_INTEGRATION=1 vitest run src/integration/public-read-store.test.ts"
   },
   "dependencies": {
+    "@opensymbols/avatar-svg": "workspace:*",
     "@clerk/backend": "^3.11.7",
     "@hono/node-server": "^2.0.10",
     "hono": "^4.12.30",

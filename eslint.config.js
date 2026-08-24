@@ -12,7 +12,7 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ['apps/site/**/*.{ts,tsx}'],
+    files: ['apps/site/**/*.{ts,tsx}', 'packages/avatar-svg/**/*.{ts,tsx}'],
     languageOptions: {
       globals: globals.browser,
     },
@@ -28,7 +28,13 @@ export default tseslint.config(
     },
   },
   {
-    files: ['apps/server/**/*.ts', 'apps/site/vite.config.ts'],
+    files: [
+      'apps/server/**/*.ts',
+      'apps/site/vite.config.ts',
+      'packages/avatar-svg/scripts/**/*.ts',
+      'packages/avatar-svg/*.ts',
+      'packages/avatar-svg/browser-test/**/*.ts',
+    ],
     languageOptions: {
       globals: globals.node,
     },

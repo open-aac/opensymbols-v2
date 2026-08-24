@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@opensymbols/avatar-svg": "workspace:*",
     "@clerk/react-router": "^3.5.12",
     "lucide-react": "^1.25.0",
     "motion": "^12.42.2",
