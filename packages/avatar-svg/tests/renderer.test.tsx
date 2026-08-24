@@ -42,7 +42,8 @@ describe('avatar resolution and rendering', () => {
       expect(parts).not.toContain('arm-left-forearm-neutral')
       expect(parts).not.toContain('body-average')
       expect(parts).not.toContain('bottom-trousers')
-      expect(result.parts.find(({ part }) => part.id === 'hand-left-relaxed')?.transform).toBe('translate(25 -5)')
+      expect(result.parts.find(({ part }) => part.id === 'arm-left-forearm-seated')?.transform).toBe('translate(88 153) rotate(-22 20 10)')
+      expect(result.parts.find(({ part }) => part.id === 'hand-left-relaxed')?.transform).toBe('translate(19 0)')
     }
   })
 

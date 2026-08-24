@@ -101,28 +101,28 @@ function seatedTop(id: string, jumper: boolean): SvgPartDefinition {
 
 const standingArmParts: SvgPartDefinition[] = [
   part('arm-left-upper-neutral', 'actionPart', 'skin', 'rear-limbs', [
-    path('M127 116 C121 112 112 111 107 116 C100 124 99 139 100 147 L94 158 C96 165 104 168 111 164 C117 160 118 152 115 146 C117 134 121 123 127 116 Z'),
-  ], [connector('left-shoulder', 'shoulder-v1', 119, 119), connector('left-elbow', 'elbow-v1', 102, 158)]),
+    path('M10 7 Q20 1 30 7 C34 20 33 33 29 53 Q20 61 11 53 C7 34 6 20 10 7 Z'),
+  ], [connector('left-shoulder', 'shoulder-v1', 20, 10), connector('left-elbow', 'elbow-v1', 20, 56)]),
   part('arm-left-forearm-neutral', 'actionPart', 'skin', 'rear-limbs', [
-    path('M94 154 C89 167 87 184 87 196 C87 204 94 209 101 207 C107 204 108 198 107 192 L111 161 C107 154 100 151 94 154 Z'),
-  ], [connector('left-elbow', 'elbow-v1', 102, 158), connector('left-wrist', 'wrist-v1', 97, 201, 14)]),
+    path('M11 7 Q20 2 29 7 C32 19 30 35 26 49 Q20 57 13 49 C10 35 8 19 11 7 Z'),
+  ], [connector('left-elbow', 'elbow-v1', 20, 10), connector('left-wrist', 'wrist-v1', 20, 52, 14)]),
   part('arm-right-upper-neutral', 'actionPart', 'skin', 'rear-limbs', [
-    path('M173 116 C179 112 188 111 193 116 C200 124 201 139 200 147 L206 158 C204 165 196 168 189 164 C183 160 182 152 185 146 C183 134 179 123 173 116 Z'),
-  ], [connector('right-shoulder', 'shoulder-v1', 181, 119), connector('right-elbow', 'elbow-v1', 198, 158)]),
+    path('M10 7 Q20 1 30 7 C34 20 33 33 29 53 Q20 61 11 53 C7 34 6 20 10 7 Z'),
+  ], [connector('right-shoulder', 'shoulder-v1', 20, 10), connector('right-elbow', 'elbow-v1', 20, 56)]),
   part('arm-right-forearm-neutral', 'actionPart', 'skin', 'rear-limbs', [
-    path('M206 154 C211 167 213 184 213 196 C213 204 206 209 199 207 C193 204 192 198 193 192 L189 161 C193 154 200 151 206 154 Z'),
-  ], [connector('right-elbow', 'elbow-v1', 198, 158), connector('right-wrist', 'wrist-v1', 203, 201, 14)]),
+    path('M11 7 Q20 2 29 7 C32 19 30 35 26 49 Q20 57 13 49 C10 35 8 19 11 7 Z'),
+  ], [connector('right-elbow', 'elbow-v1', 20, 10), connector('right-wrist', 'wrist-v1', 20, 52, 14)]),
 ]
 
 const seatedArmParts: SvgPartDefinition[] = [
   standingArmParts[0]!,
   part('arm-left-forearm-seated', 'actionPart', 'skin', 'rear-limbs', [
-    path('M94 154 C96 168 108 184 120 199 C125 203 131 198 129 191 C119 174 114 162 111 158 C107 153 100 151 94 154 Z'),
-  ], [connector('left-elbow', 'elbow-v1', 102, 158), connector('left-wrist', 'wrist-v1', 122, 196, 14)]),
+    path('M11 7 Q20 2 29 7 C32 19 30 35 26 49 Q20 57 13 49 C10 35 8 19 11 7 Z'),
+  ], [connector('left-elbow', 'elbow-v1', 20, 10), connector('left-wrist', 'wrist-v1', 20, 52, 14)]),
   standingArmParts[2]!,
   part('arm-right-forearm-seated', 'actionPart', 'skin', 'rear-limbs', [
-    path('M206 154 C204 168 192 184 180 199 C175 203 169 198 171 191 C181 174 186 162 189 158 C193 153 200 151 206 154 Z'),
-  ], [connector('right-elbow', 'elbow-v1', 198, 158), connector('right-wrist', 'wrist-v1', 178, 196, 14)]),
+    path('M11 7 Q20 2 29 7 C32 19 30 35 26 49 Q20 57 13 49 C10 35 8 19 11 7 Z'),
+  ], [connector('right-elbow', 'elbow-v1', 20, 10), connector('right-wrist', 'wrist-v1', 20, 52, 14)]),
 ]
 
 const parts: SvgPartDefinition[] = [
@@ -220,11 +220,11 @@ const parts: SvgPartDefinition[] = [
     path('M138 96 C145 100 155 100 162 96', 'none', 3),
   ]),
   part('hand-left-relaxed', 'actionPart', 'skin', 'front-limbs-hands', [
-    path('M96 198 C88 199 85 207 89 214 C93 221 104 222 109 215 C113 208 107 199 96 198 Z'),
-  ], [connector('left-wrist', 'wrist-v1', 97, 201, 14)]),
+    path('M99 202 Q105 198 111 202 L112 209 C117 211 116 217 112 221 C107 226 99 224 95 219 C91 213 93 206 99 202 Z'),
+  ], [connector('left-wrist', 'wrist-v1', 105, 203, 14)]),
   part('hand-right-relaxed', 'actionPart', 'skin', 'front-limbs-hands', [
-    path('M204 198 C212 199 215 207 211 214 C207 221 196 222 191 215 C187 208 193 199 204 198 Z'),
-  ], [connector('right-wrist', 'wrist-v1', 203, 201, 14)]),
+    path('M201 202 Q195 198 189 202 L188 209 C183 211 184 217 188 221 C193 226 201 224 205 219 C209 213 207 206 201 202 Z'),
+  ], [connector('right-wrist', 'wrist-v1', 195, 203, 14)]),
   part('hair-short-front', 'frontHair', 'hair', 'front-hair-accessories', [
     path('M107 67 C103 48 112 31 129 24 C149 15 174 22 187 39 C196 51 196 67 190 78 C183 61 174 51 164 47 C151 54 135 53 121 47 C115 54 111 61 107 67 Z'),
   ]),
@@ -286,19 +286,19 @@ export const developmentArtKit: AvatarArtKitManifest = {
     ...['body-slim', 'body-average', 'body-broad'].map((triggerPartId) => ({
       triggerPartId,
       placements: [
-        { partId: 'arm-left-upper-neutral' },
-        { partId: 'arm-left-forearm-neutral' },
-        { partId: 'arm-right-upper-neutral' },
-        { partId: 'arm-right-forearm-neutral' },
+        { partId: 'arm-left-upper-neutral', transform: 'translate(96 108) rotate(10 20 10)' },
+        { partId: 'arm-left-forearm-neutral', transform: 'translate(88 153) rotate(4 20 10)' },
+        { partId: 'arm-right-upper-neutral', transform: 'translate(164 108) rotate(-10 20 10)' },
+        { partId: 'arm-right-forearm-neutral', transform: 'translate(172 153) rotate(-4 20 10)' },
       ],
     })),
     ...['body-slim-seated', 'body-average-seated', 'body-broad-seated'].map((triggerPartId) => ({
       triggerPartId,
       placements: [
-        { partId: 'arm-left-upper-neutral' },
-        { partId: 'arm-left-forearm-seated' },
-        { partId: 'arm-right-upper-neutral' },
-        { partId: 'arm-right-forearm-seated' },
+        { partId: 'arm-left-upper-neutral', transform: 'translate(96 108) rotate(10 20 10)' },
+        { partId: 'arm-left-forearm-seated', transform: 'translate(88 153) rotate(-22 20 10)' },
+        { partId: 'arm-right-upper-neutral', transform: 'translate(164 108) rotate(-10 20 10)' },
+        { partId: 'arm-right-forearm-seated', transform: 'translate(172 153) rotate(22 20 10)' },
       ],
     })),
   ],
@@ -325,8 +325,8 @@ export const developmentArtKit: AvatarArtKitManifest = {
       },
     },
     placements: [{ partId: 'equipment-wheelchair-front' }],
-    leftHandTransform: 'translate(25 -5)',
-    rightHandTransform: 'translate(-25 -5)',
+    leftHandTransform: 'translate(19 0)',
+    rightHandTransform: 'translate(-19 0)',
   }],
 }
 
